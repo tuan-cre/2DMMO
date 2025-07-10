@@ -57,24 +57,239 @@
         display: block;
       }
     }
+    
+    /* Scoreboard styles */
+    .scoreboard {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      min-width: 150px;
+      z-index: 1000;
+    }
+    
+    .scoreboard h3 {
+      margin: 0 0 10px 0;
+      text-align: center;
+      color: #FFD700;
+      font-size: 16px;
+    }
+    
+    .score-item {
+      display: flex;
+      justify-content: space-between;
+      margin: 5px 0;
+      padding: 2px 0;
+    }
+    
+    .score-item.self {
+      color: #00FF00;
+      font-weight: bold;
+    }
+    
+    /* Mobile sword button */
+    .sword-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 215, 0, 0.8);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      color: #8B4513;
+      font-size: 24px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    
+    .sword-button:active {
+      background: rgba(255, 215, 0, 1);
+      transform: scale(0.95);
+    }
+    
+    /* Show sword button on mobile devices */
+    @media (max-width: 768px), (pointer: coarse) {
+      .sword-button {
+        display: flex;
+      }
+    }
   </style>
 </head>
 <body>
-  <canvas id="game"></canvas>
-  
-  <!-- Mobile D-pad -->
+  <canvas id="game"></canvas>    <!-- Mobile D-pad -->
   <div class="dpad">
     <div class="dpad-button dpad-up" data-direction="up">↑</div>
     <div class="dpad-button dpad-down" data-direction="down">↓</div>
     <div class="dpad-button dpad-left" data-direction="left">←</div>
     <div class="dpad-button dpad-right" data-direction="right">→</div>
   </div>
+  
+  <!-- Mobile sword button -->
+  <div class="sword-button" id="sword-button">⚔️</div>
+  
+  <!-- Scoreboard -->
+  <div class="scoreboard" id="scoreboard">
+    <h3>🏆 Kill Score</h3>
+    <div id="score-list"></div>
+  </div>
 
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     let players = {};
+    let enemies = {};
+    let playerScores = {};
     let selfId = null;
+    
+    // Animation tracking
+    let playerAnimations = {};
+    let animationFrame = 0;
+    
+    // Update animation frame counter
+    setInterval(() => {
+      animationFrame++;
+    }, 300); // Change frame every 300ms
+    
+    // Asset management
+    const assets = {
+      sprites: {},
+      backgrounds: {},
+      loaded: false
+    };
+    
+    // Load assets
+    function loadAssets() {
+      const assetsToLoad = [
+        { type: 'sprites', name: 'player_self1', src: 'assets/sprites/player_self1.png' },
+        { type: 'sprites', name: 'player_self2', src: 'assets/sprites/player_self2.png' },
+        { type: 'sprites', name: 'player_other1', src: 'assets/sprites/player_other1.png' },
+        { type: 'sprites', name: 'player_other2', src: 'assets/sprites/player_other2.png' },
+        { type: 'sprites', name: 'enemy', src: 'assets/sprites/enemy.png' },
+        { type: 'backgrounds', name: 'grass', src: 'assets/backgrounds/grass_tile.png' }
+      ];
+      
+      let loadedCount = 0;
+      const totalAssets = assetsToLoad.length;
+      
+      // Create fallback sprites if images don't exist
+      function createFallbackSprite(color, size = 32) {
+        const fallbackCanvas = document.createElement('canvas');
+        fallbackCanvas.width = size;
+        fallbackCanvas.height = size;
+        const fallbackCtx = fallbackCanvas.getContext('2d');
+        
+        // Draw a simple character sprite
+        fallbackCtx.fillStyle = color;
+        fallbackCtx.fillRect(6, 6, 20, 20);
+        fallbackCtx.fillStyle = '#333';
+        fallbackCtx.fillRect(8, 8, 4, 4); // Eyes
+        fallbackCtx.fillRect(14, 8, 4, 4);
+        fallbackCtx.fillRect(10, 16, 6, 2); // Mouth
+        
+        return fallbackCanvas;
+      }
+      
+      // Create fallback background
+      function createFallbackBackground() {
+        const bgCanvas = document.createElement('canvas');
+        bgCanvas.width = 64;
+        bgCanvas.height = 64;
+        const bgCtx = bgCanvas.getContext('2d');
+        
+        // Create a simple grass-like pattern
+        bgCtx.fillStyle = '#90EE90';
+        bgCtx.fillRect(0, 0, 64, 64);
+        bgCtx.fillStyle = '#228B22';
+        for (let i = 0; i < 20; i++) {
+          bgCtx.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
+        }
+        
+        return bgCanvas;
+      }
+      
+      function checkAssetsLoaded() {
+        loadedCount++;
+        if (loadedCount === totalAssets) {
+          assets.loaded = true;
+          console.log('All assets loaded!');
+        }
+      }
+      
+      // Load each asset
+      assetsToLoad.forEach(asset => {
+        const img = new Image();
+        img.onload = () => {
+          assets[asset.type][asset.name] = img;
+          checkAssetsLoaded();
+        };
+        img.onerror = () => {
+          console.log(`Failed to load ${asset.src}, using fallback`);
+          // Use fallback sprites
+          if (asset.type === 'sprites') {
+            let color;
+            if (asset.name.includes('self')) {
+              color = '#00FF00';
+            } else if (asset.name === 'enemy') {
+              color = '#FF0000';
+            } else {
+              color = '#00FFFF';
+            }
+            assets[asset.type][asset.name] = createFallbackSprite(color);
+          } else if (asset.type === 'backgrounds') {
+            assets[asset.type][asset.name] = createFallbackBackground();
+          }
+          checkAssetsLoaded();
+        };
+        img.src = asset.src;
+      });
+    }
+    
+    // Initialize assets
+    loadAssets();
+    
+    // Update scoreboard display
+    function updateScoreboard() {
+      const scoreList = document.getElementById('score-list');
+      scoreList.innerHTML = '';
+      
+      // Create array of players with scores for sorting
+      const playerScoreArray = [];
+      for (let playerId in players) {
+        const player = players[playerId];
+        const score = playerScores[playerId] || 0;
+        playerScoreArray.push({
+          id: playerId,
+          name: player.name,
+          score: score,
+          isSelf: playerId === selfId
+        });
+      }
+      
+      // Sort by score (highest first)
+      playerScoreArray.sort((a, b) => b.score - a.score);
+      
+      // Display scores
+      playerScoreArray.forEach(player => {
+        const scoreItem = document.createElement('div');
+        scoreItem.className = 'score-item' + (player.isSelf ? ' self' : '');
+        scoreItem.innerHTML = `
+          <span>${player.name}</span>
+          <span>${player.score}</span>
+        `;
+        scoreList.appendChild(scoreItem);
+      });
+    }
     
     // Set canvas size to full screen
     function resizeCanvas() {
@@ -92,7 +307,27 @@
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
       if (data.players) {
+        // Update animation state for players who moved
+        for (let id in data.players) {
+          const newPlayer = data.players[id];
+          const oldPlayer = players[id];
+          
+          if (oldPlayer && (newPlayer.x !== oldPlayer.x || newPlayer.y !== oldPlayer.y)) {
+            // Player moved, mark as moving
+            if (!playerAnimations[id]) playerAnimations[id] = {};
+            playerAnimations[id].isMoving = true;
+            playerAnimations[id].lastMoveTime = Date.now();
+          }
+        }
+        
         players = data.players;
+      }
+      if (data.enemies) {
+        enemies = data.enemies;
+      }
+      if (data.scores) {
+        playerScores = data.scores;
+        updateScoreboard();
       }
       if (data.id && !selfId) {
         selfId = data.id;
@@ -130,8 +365,17 @@
       
       if (keyMap[e.key]) {
         movePlayer(keyMap[e.key]);
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        // Spacebar for sword swing
+        e.preventDefault();
+        swingSword();
       }
     });
+    
+    // Sword swing function
+    function swingSword() {
+      ws.send(JSON.stringify({ type: "sword_swing" }));
+    }
 
     // Touch controls for mobile D-pad
     document.querySelectorAll('.dpad-button').forEach(button => {
@@ -149,22 +393,190 @@
         movePlayer(direction);
       });
     });
+    
+    // Mobile sword button
+    document.getElementById('sword-button').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      swingSword();
+    });
+    
+    document.getElementById('sword-button').addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      swingSword();
+    });
 
     // Draw loop
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw background if available
+      if (assets.loaded && assets.backgrounds.grass) {
+        const bg = assets.backgrounds.grass;
+        const pattern = ctx.createPattern(bg, 'repeat');
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Draw players
       for (let id in players) {
         const p = players[id];
         
-        // Draw player rectangle
-        ctx.fillStyle = id === selfId ? 'lime' : 'cyan';
-        ctx.fillRect(p.x, p.y, 10, 10);
+        // Update swing state based on server time
+        if (p.isSwinging && Date.now() > p.swingEndTime) {
+          p.isSwinging = false;
+        }
+        
+        if (assets.loaded) {
+          // Initialize animation state if needed
+          if (!playerAnimations[id]) {
+            playerAnimations[id] = { isMoving: false, lastMoveTime: 0 };
+          }
+          
+          // Check if player should stop moving animation
+          const timeSinceMove = Date.now() - playerAnimations[id].lastMoveTime;
+          if (timeSinceMove > 500) { // Stop animation 500ms after last move
+            playerAnimations[id].isMoving = false;
+          }
+          
+          // Choose sprite based on player type and animation state
+          let spriteName;
+          if (id === selfId) {
+            // Self player sprites
+            if (playerAnimations[id].isMoving) {
+              spriteName = (Math.floor(animationFrame / 2) % 2 === 0) ? 'player_self1' : 'player_self2';
+            } else {
+              spriteName = 'player_self1'; // Default to frame 1 when not moving
+            }
+          } else {
+            // Other player sprites
+            if (playerAnimations[id].isMoving) {
+              spriteName = (Math.floor(animationFrame / 2) % 2 === 0) ? 'player_other1' : 'player_other2';
+            } else {
+              spriteName = 'player_other1'; // Default to frame 1 when not moving
+            }
+          }
+          
+          const sprite = assets.sprites[spriteName];
+          if (sprite) {
+            // Draw sprite (32x32) centered on player position
+            ctx.drawImage(sprite, p.x - 11, p.y - 11, 32, 32);
+          }
+          
+          // Draw sword swing effect if player is swinging
+          if (p.isSwinging) {
+            drawSwordSwing(p);
+          }
+        } else {
+          // Fallback to rectangles while assets are loading
+          ctx.fillStyle = id === selfId ? 'lime' : 'cyan';
+          ctx.fillRect(p.x, p.y, 10, 10);
+        }
         
         // Draw player name above the character
         ctx.fillStyle = 'black';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(p.name || 'Player', p.x + 5, p.y - 5);
+        ctx.fillText(p.name || 'Player', p.x + 5, p.y - 25);
+        
+        // Draw player health bar
+        if (p.health !== undefined) {
+          drawHealthBar(p.x + 5, p.y - 15, p.health, p.maxHealth, 'lime');
+        }
+      }
+      
+      // Draw sword swing effect
+      function drawSwordSwing(player) {
+        ctx.strokeStyle = '#FFD700'; // Gold color for sword
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        
+        const swordLength = 15; // Reduced from 25 to match server range
+        let startX = player.x + 5; // Center of player
+        let startY = player.y + 5;
+        let endX = startX;
+        let endY = startY;
+        
+        // Calculate sword position based on facing direction
+        switch(player.facing) {
+          case 'up':
+            startY = player.y - 5;
+            endX = startX;
+            endY = startY - swordLength;
+            break;
+          case 'down':
+            startY = player.y + 15;
+            endX = startX;
+            endY = startY + swordLength;
+            break;
+          case 'left':
+            startX = player.x - 5;
+            endX = startX - swordLength;
+            endY = startY;
+            break;
+          case 'right':
+            startX = player.x + 15;
+            endX = startX + swordLength;
+            endY = startY;
+            break;
+        }
+        
+        // Draw sword line
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        
+        // Draw sword tip (small circle)
+        ctx.fillStyle = '#C0C0C0'; // Silver tip
+        ctx.beginPath();
+        ctx.arc(endX, endY, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Draw enemies
+      for (let id in enemies) {
+        const enemy = enemies[id];
+        
+        if (assets.loaded && assets.sprites.enemy) {
+          // Draw enemy sprite
+          ctx.drawImage(assets.sprites.enemy, enemy.x - 11, enemy.y - 11, 32, 32);
+        } else {
+          // Fallback to red rectangle while assets are loading
+          ctx.fillStyle = 'red';
+          ctx.fillRect(enemy.x, enemy.y, 10, 10);
+        }
+        
+        // Draw enemy name above the character
+        ctx.fillStyle = 'red';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(enemy.name || 'Enemy', enemy.x + 5, enemy.y - 25);
+        
+        // Draw enemy health bar
+        if (enemy.health !== undefined) {
+          drawHealthBar(enemy.x + 5, enemy.y - 15, enemy.health, enemy.maxHealth, 'red');
+        }
+      }
+      
+      // Health bar drawing function
+      function drawHealthBar(centerX, y, currentHealth, maxHealth, color) {
+        const barWidth = 30;
+        const barHeight = 4;
+        const x = centerX - barWidth / 2;
+        
+        // Background (black border)
+        ctx.fillStyle = 'black';
+        ctx.fillRect(x - 1, y - 1, barWidth + 2, barHeight + 2);
+        
+        // Background (dark gray)
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x, y, barWidth, barHeight);
+        
+        // Health bar (colored)
+        const healthPercentage = Math.max(0, currentHealth / maxHealth);
+        const healthWidth = barWidth * healthPercentage;
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, healthWidth, barHeight);
       }
       requestAnimationFrame(draw);
     }
