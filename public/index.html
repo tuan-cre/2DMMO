@@ -554,11 +554,19 @@
       for (let id in players) {
         const p = players[id];
         
-        // Update swing state based on server data for all players
+        // Clear sword swings based on client-side timing
         if (p.isSwinging) {
-          // Only log that we're drawing, don't modify the swing state
-          // Let the server handle clearing the swing state
-          console.log(`Drawing sword for player ${id}, facing: ${p.facing}, isSwinging: ${p.isSwinging}`);
+          if (p.swingEndTime && Date.now() > p.swingEndTime) {
+            console.log(`Client clearing sword swing for player ${id}`);
+            p.isSwinging = false;
+          } else if (!p.swingEndTime && p.swingStartTime) {
+            // Calculate end time if missing
+            p.swingEndTime = p.swingStartTime + 300;
+          } else if (!p.swingEndTime && !p.swingStartTime) {
+            // If we have isSwinging but no timing data, create timing
+            p.swingStartTime = Date.now();
+            p.swingEndTime = Date.now() + 300;
+          }
         }
         
         if (assets.loaded) {

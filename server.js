@@ -37,6 +37,18 @@ function spawnEnemies() {
 // Spawn enemies on server start
 spawnEnemies();
 
+// Periodic cleanup of expired sword swings (independent of broadcasts)
+setInterval(() => {
+  const now = Date.now();
+  for (let id in players) {
+    const player = players[id];
+    if (player.isSwinging && player.swingEndTime && now > player.swingEndTime) {
+      player.isSwinging = false;
+      console.log(`⏰ Periodic cleanup: cleared sword swing for player ${id}`);
+    }
+  }
+}, 100); // Check every 100ms
+
 // Sword collision detection function
 function checkSwordCollisions(playerId) {
   const player = players[playerId];
@@ -129,17 +141,6 @@ function broadcast(data = {}, priority = false) {
 // Actual broadcast function
 function performBroadcast(data = {}) {
   lastBroadcastTime = Date.now();
-  const now = Date.now();
-  
-  // Clear expired sword swings (be more lenient for network sync)
-  for (let id in players) {
-    const player = players[id];
-    if (player.isSwinging && player.swingEndTime && now > player.swingEndTime + 500) {
-      // Add 500ms buffer to ensure all clients receive the swing data, especially on slower networks
-      player.isSwinging = false;
-      console.log(`Server cleared sword swing for player ${id}`);
-    }
-  }
   
   // Only send necessary data to reduce bandwidth
   const optimizedData = {
