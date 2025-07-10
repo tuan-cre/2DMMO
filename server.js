@@ -129,6 +129,17 @@ function broadcast(data = {}, priority = false) {
 // Actual broadcast function
 function performBroadcast(data = {}) {
   lastBroadcastTime = Date.now();
+  const now = Date.now();
+  
+  // Clear expired sword swings (but be more lenient)
+  for (let id in players) {
+    const player = players[id];
+    if (player.isSwinging && player.swingEndTime && now > player.swingEndTime + 100) {
+      // Add 100ms buffer to ensure all clients receive the swing data
+      player.isSwinging = false;
+      console.log(`Server cleared sword swing for player ${id}`);
+    }
+  }
   
   // Only send necessary data to reduce bandwidth
   const optimizedData = {
@@ -247,15 +258,20 @@ wss.on('connection', ws => {
         const p = players[id];
         if (!p) return;
         
-        // Set sword swing state - let client handle timing, server keeps it longer
+        // Set sword swing state
         p.isSwinging = true;
         p.swingStartTime = Date.now(); // Track when swing started
-        p.swingEndTime = Date.now() + 1000; // Keep active for 1 second on server (longer than client)
+        p.swingEndTime = Date.now() + 300; // Swing lasts 300ms
         
         console.log(`⚔️ Player ${id} swings sword facing ${p.facing}! Broadcasting immediately.`);
         
         // Immediately broadcast sword swing with highest priority
         broadcast({ scores: playerScores }, true);
+        
+        // Broadcast again after a short delay to ensure all clients receive it
+        setTimeout(() => {
+          broadcast({ scores: playerScores }, true);
+        }, 50);
         
         // Check for enemies in sword range
         const swordCollisions = checkSwordCollisions(id);
@@ -275,14 +291,6 @@ wss.on('connection', ws => {
             broadcast({ scores: playerScores }, true);
           }
         }
-        
-        // Clear sword swing after a delay on server only
-        setTimeout(() => {
-          if (p.isSwinging && Date.now() >= p.swingEndTime) {
-            p.isSwinging = false;
-            console.log(`Server cleared sword swing for player ${id} after delay`);
-          }
-        }, 1000);
       }
     } catch (e) {
       console.error('Bad JSON:', e);
