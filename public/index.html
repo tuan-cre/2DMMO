@@ -154,7 +154,7 @@
     
     // Client-side prediction and lag compensation
     let lastMoveTime = 0;
-    const MOVE_THROTTLE = 100; // Limit move commands to 10fps
+    const MOVE_THROTTLE = 42; // Limit move commands to 24fps for consistent performance
     let pendingMoves = [];
     
     // Animation tracking
@@ -306,8 +306,9 @@
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Connect to server
-    const ws = new WebSocket("ws://" + location.host);
+    // Connect to server - automatically use ws:// for http and wss:// for https
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(protocol + "//" + location.host);
 
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
@@ -342,6 +343,7 @@
                 players[id].health = serverPlayer.health;
                 players[id].maxHealth = serverPlayer.maxHealth;
                 players[id].isSwinging = serverPlayer.isSwinging;
+                players[id].swingEndTime = serverPlayer.swingEndTime; // Sync swing timing
               }
             } else {
               players[id] = serverPlayer;
@@ -382,10 +384,10 @@
       lastMoveTime = now;
       
       const moveMap = {
-        up: [0, -5],
-        down: [0, 5],
-        left: [-5, 0],
-        right: [5, 0]
+        up: [0, -8],
+        down: [0, 8],
+        left: [-8, 0],
+        right: [8, 0]
       };
       
       if (moveMap[direction]) {

@@ -15,7 +15,7 @@ let playerScores = {}; // Track kill scores for each player
 
 // Optimization variables
 let lastBroadcastTime = 0;
-const BROADCAST_INTERVAL = 50; // Limit broadcasts to 20fps (50ms intervals)
+const BROADCAST_INTERVAL = 42; // Limit broadcasts to 24fps (42ms intervals) for optimized performance
 let pendingBroadcast = false;
 
 // Initialize enemies when server starts
@@ -102,8 +102,16 @@ function checkSwordCollisions(playerId) {
 }
 
 // Broadcast to all clients with throttling
-function broadcast(data) {
+function broadcast(data = {}) {
   const now = Date.now();
+  
+  // Clear expired sword swings
+  for (let id in players) {
+    const player = players[id];
+    if (player.isSwinging && now > player.swingEndTime) {
+      player.isSwinging = false;
+    }
+  }
   
   // If we just broadcasted recently, schedule a delayed broadcast
   if (now - lastBroadcastTime < BROADCAST_INTERVAL) {
@@ -121,7 +129,7 @@ function broadcast(data) {
 }
 
 // Actual broadcast function
-function performBroadcast(data) {
+function performBroadcast(data = {}) {
   lastBroadcastTime = Date.now();
   
   // Only send necessary data to reduce bandwidth
@@ -140,6 +148,7 @@ function performBroadcast(data) {
       name: player.name,
       facing: player.facing,
       isSwinging: player.isSwinging,
+      swingEndTime: player.swingEndTime, // Include swing end time for proper client sync
       health: player.health,
       maxHealth: player.maxHealth
     };
@@ -191,7 +200,7 @@ wss.on('connection', ws => {
   ws.send(JSON.stringify({ id, players, enemies, scores: playerScores }));
   
   // Broadcast updated player list to all other clients
-  broadcast();
+  broadcast({ scores: playerScores });
 
   ws.on('message', msg => {
     try {
@@ -219,7 +228,7 @@ wss.on('connection', ws => {
         else if (data.dy < 0) p.facing = 'up';
         
         // Broadcast updated state to all clients with throttling
-        broadcast();
+        broadcast({ scores: playerScores });
       }
       
       if (data.type === 'sword_swing') {
@@ -236,7 +245,7 @@ wss.on('connection', ws => {
         console.log(`⚔️ Player ${id} swings sword facing ${p.facing}!`);
         
         // Broadcast updated state with immediate priority for combat
-        broadcast();
+        broadcast({ scores: playerScores });
         
         if (swordCollisions > 0) {
           const remainingEnemies = Object.keys(enemies).length;
@@ -247,7 +256,7 @@ wss.on('connection', ws => {
           if (remainingEnemies === 0) {
             console.log('🔄 All enemies defeated! Respawning...');
             spawnEnemies();
-            broadcast(); // Immediate broadcast for respawn
+            broadcast({ scores: playerScores }); // Immediate broadcast for respawn
           }
         }
       }
@@ -261,7 +270,7 @@ wss.on('connection', ws => {
     delete players[id];
     delete playerScores[id]; // Clean up score when player leaves
     // Broadcast updated state when player disconnects
-    broadcast();
+    broadcast({ scores: playerScores });
   });
 });
 
