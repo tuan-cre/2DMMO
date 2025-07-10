@@ -328,6 +328,16 @@
 
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
+      
+      // Debug: Log when we receive player data with sword swings
+      if (data.players) {
+        for (let id in data.players) {
+          if (data.players[id].isSwinging && id !== selfId) {
+            console.log(`Received sword swing data for player ${id}:`, data.players[id]);
+          }
+        }
+      }
+      
       if (data.players) {
         // Update animation state for players who moved
         for (let id in data.players) {
@@ -387,9 +397,17 @@
             }
           } else {
             // For other players, always use server data and ensure swing timing is set
-            players[id] = { ...data.players[id] };
-            if (data.players[id].isSwinging && data.players[id].swingStartTime) {
-              players[id].swingEndTime = data.players[id].swingStartTime + 300;
+            const serverPlayer = data.players[id];
+            players[id] = { ...serverPlayer };
+            
+            // Debug logging for other players' sword swings
+            if (serverPlayer.isSwinging) {
+              console.log(`Player ${id} is swinging sword! Facing: ${serverPlayer.facing}, StartTime: ${serverPlayer.swingStartTime}`);
+            }
+            
+            if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
+              players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+              console.log(`Set swing end time for player ${id}: ${players[id].swingEndTime}`);
             }
           }
         }
@@ -539,8 +557,14 @@
         const p = players[id];
         
         // Update swing state based on duration for all players
-        if (p.isSwinging && p.swingEndTime && Date.now() > p.swingEndTime) {
-          p.isSwinging = false;
+        if (p.isSwinging) {
+          if (p.swingEndTime && Date.now() > p.swingEndTime) {
+            console.log(`Clearing sword swing for player ${id}`);
+            p.isSwinging = false;
+          } else if (!p.swingEndTime && p.swingStartTime) {
+            // Fallback: calculate end time if missing
+            p.swingEndTime = p.swingStartTime + 300;
+          }
         }
         
         if (assets.loaded) {
@@ -581,6 +605,7 @@
           
           // Draw sword swing effect if player is swinging
           if (p.isSwinging) {
+            console.log(`Drawing sword for player ${id}, facing: ${p.facing}, isSwinging: ${p.isSwinging}`);
             drawSwordSwing(p);
           }
         } else {
@@ -603,6 +628,8 @@
       
       // Draw sword swing effect
       function drawSwordSwing(player) {
+        console.log(`drawSwordSwing called for player facing ${player.facing}, assets loaded: ${assets.loaded}`);
+        
         // Get the appropriate sword sprite based on facing direction
         let swordSprite;
         let swordX = player.x;
