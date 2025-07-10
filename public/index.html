@@ -366,7 +366,7 @@
               if (timeSinceLastMove > 150) { // Reduced from 200ms for faster updates
                 // Been a while since we moved, trust server position
                 players[id] = { ...serverPlayer };
-                // Always sync swing data from server
+                // Always calculate client-side end time for 300ms duration
                 if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
                   players[id].swingEndTime = serverPlayer.swingStartTime + 300;
                 }
@@ -381,10 +381,14 @@
                   players[id].facing = serverPlayer.facing;
                 }
                 
-                // ALWAYS handle swing state from server for proper sync - no client prediction
+                // ALWAYS handle swing state from server for proper sync - but use client timing
                 players[id].isSwinging = serverPlayer.isSwinging;
                 players[id].swingStartTime = serverPlayer.swingStartTime;
-                players[id].swingEndTime = serverPlayer.swingEndTime;
+                
+                // Client calculates its own end time for consistent 300ms duration
+                if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
+                  players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+                }
                 
                 // Debug log for self sword swings
                 if (serverPlayer.isSwinging) {
@@ -394,6 +398,7 @@
             } else {
               // First time seeing this player
               players[id] = { ...serverPlayer };
+              // Always calculate client-side end time for 300ms duration
               if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
                 players[id].swingEndTime = serverPlayer.swingStartTime + 300;
               }
@@ -410,7 +415,7 @@
             
             if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
               players[id].swingEndTime = serverPlayer.swingStartTime + 300;
-              console.log(`Set swing end time for player ${id}: ${players[id].swingEndTime}`);
+              console.log(`Set swing end time for player ${id}: ${players[id].swingEndTime} (duration: 300ms)`);
             }
           }
         }
