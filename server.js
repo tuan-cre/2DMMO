@@ -105,14 +105,6 @@ function checkSwordCollisions(playerId) {
 function broadcast(data = {}, priority = false) {
   const now = Date.now();
   
-  // Clear expired sword swings
-  for (let id in players) {
-    const player = players[id];
-    if (player.isSwinging && now > player.swingEndTime) {
-      player.isSwinging = false;
-    }
-  }
-  
   // For high priority events (combat), bypass throttling
   if (priority) {
     performBroadcast(data);
@@ -137,6 +129,17 @@ function broadcast(data = {}, priority = false) {
 // Actual broadcast function
 function performBroadcast(data = {}) {
   lastBroadcastTime = Date.now();
+  const now = Date.now();
+  
+  // Clear expired sword swings (be more lenient for network sync)
+  for (let id in players) {
+    const player = players[id];
+    if (player.isSwinging && player.swingEndTime && now > player.swingEndTime + 500) {
+      // Add 500ms buffer to ensure all clients receive the swing data, especially on slower networks
+      player.isSwinging = false;
+      console.log(`Server cleared sword swing for player ${id}`);
+    }
+  }
   
   // Only send necessary data to reduce bandwidth
   const optimizedData = {
@@ -159,6 +162,11 @@ function performBroadcast(data = {}) {
       health: player.health,
       maxHealth: player.maxHealth
     };
+    
+    // Debug log when sending sword swing data
+    if (player.isSwinging) {
+      console.log(`📡 Broadcasting sword swing for player ${id}: isSwinging=${player.isSwinging}, facing=${player.facing}, startTime=${player.swingStartTime}`);
+    }
   }
   
   // Only send necessary enemy data
@@ -255,13 +263,18 @@ wss.on('connection', ws => {
         p.swingStartTime = Date.now(); // Track when swing started
         p.swingEndTime = Date.now() + 300; // Swing lasts 300ms
         
+        console.log(`⚔️ Player ${id} swings sword facing ${p.facing}! Broadcasting immediately.`);
+        
+        // Immediately broadcast sword swing with highest priority
+        broadcast({ scores: playerScores }, true);
+        
+        // Broadcast again after a short delay to ensure all clients receive it
+        setTimeout(() => {
+          broadcast({ scores: playerScores }, true);
+        }, 50);
+        
         // Check for enemies in sword range
         const swordCollisions = checkSwordCollisions(id);
-        
-        console.log(`⚔️ Player ${id} swings sword facing ${p.facing}!`);
-        
-        // Broadcast updated state with immediate priority for combat
-        broadcast({ scores: playerScores }, true); // High priority for combat
         
         if (swordCollisions > 0) {
           const remainingEnemies = Object.keys(enemies).length;
@@ -273,6 +286,9 @@ wss.on('connection', ws => {
             console.log('🔄 All enemies defeated! Respawning...');
             spawnEnemies();
             broadcast({ scores: playerScores }, true); // High priority for respawn
+          } else {
+            // Broadcast again after enemy damage calculation
+            broadcast({ scores: playerScores }, true);
           }
         }
       }

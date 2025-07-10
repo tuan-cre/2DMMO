@@ -355,7 +355,7 @@
         // Merge server data with client prediction
         for (let id in data.players) {
           if (id === selfId) {
-            // For self, use a more stable approach
+            // For self, use a more stable approach but always trust server for sword swings
             const serverPlayer = data.players[id];
             const clientPlayer = players[id];
             
@@ -381,11 +381,14 @@
                   players[id].facing = serverPlayer.facing;
                 }
                 
-                // Always handle swing state from server for proper sync
+                // ALWAYS handle swing state from server for proper sync - no client prediction
                 players[id].isSwinging = serverPlayer.isSwinging;
                 players[id].swingStartTime = serverPlayer.swingStartTime;
-                if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
-                  players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+                players[id].swingEndTime = serverPlayer.swingEndTime;
+                
+                // Debug log for self sword swings
+                if (serverPlayer.isSwinging) {
+                  console.log(`Self sword swing synced from server: facing=${serverPlayer.facing}, startTime=${serverPlayer.swingStartTime}`);
                 }
               }
             } else {
@@ -502,13 +505,8 @@
     
     // Sword swing function
     function swingSword() {
-      // Client-side prediction: immediately show sword swing for self only
-      if (selfId && players[selfId]) {
-        players[selfId].isSwinging = true;
-        players[selfId].swingStartTime = Date.now();
-        players[selfId].swingEndTime = Date.now() + 300;
-      }
-      
+      // Don't do client-side prediction for sword swings - let server handle it
+      // This ensures all players see the same sword swing timing
       ws.send(JSON.stringify({ type: "sword_swing" }));
     }
 
@@ -556,15 +554,11 @@
       for (let id in players) {
         const p = players[id];
         
-        // Update swing state based on duration for all players
+        // Update swing state based on server data for all players
         if (p.isSwinging) {
-          if (p.swingEndTime && Date.now() > p.swingEndTime) {
-            console.log(`Clearing sword swing for player ${id}`);
-            p.isSwinging = false;
-          } else if (!p.swingEndTime && p.swingStartTime) {
-            // Fallback: calculate end time if missing
-            p.swingEndTime = p.swingStartTime + 300;
-          }
+          // Only log that we're drawing, don't modify the swing state
+          // Let the server handle clearing the swing state
+          console.log(`Drawing sword for player ${id}, facing: ${p.facing}, isSwinging: ${p.isSwinging}`);
         }
         
         if (assets.loaded) {
