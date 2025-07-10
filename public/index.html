@@ -154,7 +154,7 @@
     
     // Client-side prediction and lag compensation
     let lastMoveTime = 0;
-    const MOVE_THROTTLE = 50; // Reduced frequency for smoother local movement
+    const MOVE_THROTTLE = 100; // Slower updates to reduce server conflicts
     let pendingMoves = [];
     
     // Animation tracking
@@ -164,7 +164,7 @@
     // Update animation frame counter
     setInterval(() => {
       animationFrame++;
-    }, 300); // Change frame every 300ms
+    }, 500); // Change frame every 500ms (slower animation)
     
     // Asset management
     const assets = {
@@ -329,44 +329,45 @@
         // Merge server data with client prediction
         for (let id in data.players) {
           if (id === selfId) {
-            // For self, use more sophisticated prediction reconciliation
+            // For self, use a more stable approach
             const serverPlayer = data.players[id];
             const clientPlayer = players[id];
+            
             if (clientPlayer) {
-              const dx = Math.abs(serverPlayer.x - clientPlayer.x);
-              const dy = Math.abs(serverPlayer.y - clientPlayer.y);
+              // Calculate time since last move to determine if we should trust client or server
+              const timeSinceLastMove = Date.now() - lastMoveTime;
               
-              // Only reconcile if there's a significant difference (smoothly)
-              if (dx > 30 || dy > 30) {
-                // Large difference - snap to server position
-                players[id].x = serverPlayer.x;
-                players[id].y = serverPlayer.y;
-              } else if (dx > 5 || dy > 5) {
-                // Small difference - smoothly interpolate
-                players[id].x += (serverPlayer.x - clientPlayer.x) * 0.3;
-                players[id].y += (serverPlayer.y - clientPlayer.y) * 0.3;
-              }
-              // Otherwise keep client prediction
-              
-              // Always update non-position data from server
-              players[id].health = serverPlayer.health;
-              players[id].maxHealth = serverPlayer.maxHealth;
-              players[id].facing = serverPlayer.facing;
-              players[id].isSwinging = serverPlayer.isSwinging;
-              players[id].swingStartTime = serverPlayer.swingStartTime;
-              if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
-                players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+              if (timeSinceLastMove > 200) {
+                // Been a while since we moved, trust server position
+                players[id] = { ...serverPlayer };
+              } else {
+                // Recently moved, keep client position but update other data
+                players[id].health = serverPlayer.health;
+                players[id].maxHealth = serverPlayer.maxHealth;
+                players[id].name = serverPlayer.name;
+                
+                // Only update facing if it's different and we're not currently moving
+                if (timeSinceLastMove > 100) {
+                  players[id].facing = serverPlayer.facing;
+                }
+                
+                // Handle swing state
+                players[id].isSwinging = serverPlayer.isSwinging;
+                players[id].swingStartTime = serverPlayer.swingStartTime;
+                if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
+                  players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+                }
               }
             } else {
               // First time seeing this player
-              players[id] = serverPlayer;
+              players[id] = { ...serverPlayer };
               if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
                 players[id].swingEndTime = serverPlayer.swingStartTime + 300;
               }
             }
           } else {
             // For other players, use server data directly
-            players[id] = data.players[id];
+            players[id] = { ...data.players[id] };
             if (data.players[id].isSwinging && data.players[id].swingStartTime) {
               players[id].swingEndTime = data.players[id].swingStartTime + 300;
             }
@@ -537,16 +538,16 @@
           // Choose sprite based on player type and animation state
           let spriteName;
           if (id === selfId) {
-            // Self player sprites
+            // Self player sprites - use more stable animation logic
             if (playerAnimations[id].isMoving) {
-              spriteName = (Math.floor(animationFrame / 2) % 2 === 0) ? 'player_self1' : 'player_self2';
+              spriteName = (Math.floor(animationFrame / 3) % 2 === 0) ? 'player_self1' : 'player_self2';
             } else {
               spriteName = 'player_self1'; // Default to frame 1 when not moving
             }
           } else {
             // Other player sprites
             if (playerAnimations[id].isMoving) {
-              spriteName = (Math.floor(animationFrame / 2) % 2 === 0) ? 'player_other1' : 'player_other2';
+              spriteName = (Math.floor(animationFrame / 3) % 2 === 0) ? 'player_other1' : 'player_other2';
             } else {
               spriteName = 'player_other1'; // Default to frame 1 when not moving
             }
