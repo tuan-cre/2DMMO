@@ -152,6 +152,11 @@
     let playerScores = {};
     let selfId = null;
     
+    // Client-side prediction and lag compensation
+    let lastMoveTime = 0;
+    const MOVE_THROTTLE = 100; // Limit move commands to 10fps
+    let pendingMoves = [];
+    
     // Animation tracking
     let playerAnimations = {};
     let animationFrame = 0;
@@ -320,7 +325,39 @@
           }
         }
         
-        players = data.players;
+        // Merge server data with client prediction
+        for (let id in data.players) {
+          if (id === selfId) {
+            // For self, only update if server position differs significantly
+            const serverPlayer = data.players[id];
+            const clientPlayer = players[id];
+            if (clientPlayer) {
+              const dx = Math.abs(serverPlayer.x - clientPlayer.x);
+              const dy = Math.abs(serverPlayer.y - clientPlayer.y);
+              if (dx > 10 || dy > 10) {
+                // Server correction needed
+                players[id] = serverPlayer;
+              } else {
+                // Keep client prediction, but update non-position data
+                players[id].health = serverPlayer.health;
+                players[id].maxHealth = serverPlayer.maxHealth;
+                players[id].isSwinging = serverPlayer.isSwinging;
+              }
+            } else {
+              players[id] = serverPlayer;
+            }
+          } else {
+            // For other players, use server data
+            players[id] = data.players[id];
+          }
+        }
+        
+        // Remove disconnected players
+        for (let id in players) {
+          if (!data.players[id]) {
+            delete players[id];
+          }
+        }
       }
       if (data.enemies) {
         enemies = data.enemies;
@@ -334,8 +371,16 @@
       }
     };
 
-    // Movement function
+    // Movement function with client-side prediction
     function movePlayer(direction) {
+      const now = Date.now();
+      
+      // Throttle movement commands to reduce server load
+      if (now - lastMoveTime < MOVE_THROTTLE) {
+        return;
+      }
+      lastMoveTime = now;
+      
       const moveMap = {
         up: [0, -5],
         down: [0, 5],
@@ -344,10 +389,28 @@
       };
       
       if (moveMap[direction]) {
+        const dx = moveMap[direction][0];
+        const dy = moveMap[direction][1];
+        
+        // Client-side prediction: update our own position immediately
+        if (selfId && players[selfId]) {
+          const newX = Math.max(11, Math.min(canvas.width - 21, players[selfId].x + dx));
+          const newY = Math.max(11, Math.min(canvas.height - 21, players[selfId].y + dy));
+          players[selfId].x = newX;
+          players[selfId].y = newY;
+          
+          // Update facing direction immediately
+          if (dx > 0) players[selfId].facing = 'right';
+          else if (dx < 0) players[selfId].facing = 'left';
+          else if (dy > 0) players[selfId].facing = 'down';
+          else if (dy < 0) players[selfId].facing = 'up';
+        }
+        
+        // Send to server
         ws.send(JSON.stringify({ 
           type: "move", 
-          dx: moveMap[direction][0], 
-          dy: moveMap[direction][1],
+          dx: dx, 
+          dy: dy,
           canvasWidth: canvas.width,
           canvasHeight: canvas.height
         }));
