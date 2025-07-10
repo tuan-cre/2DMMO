@@ -15,7 +15,7 @@ let playerScores = {}; // Track kill scores for each player
 
 // Optimization variables
 let lastBroadcastTime = 0;
-const BROADCAST_INTERVAL = 42; // Limit broadcasts to 24fps (42ms intervals) for optimized performance
+const BROADCAST_INTERVAL = 16; // Limit broadcasts to 60fps (16ms intervals) for responsive gameplay
 let pendingBroadcast = false;
 
 // Initialize enemies when server starts
@@ -102,7 +102,7 @@ function checkSwordCollisions(playerId) {
 }
 
 // Broadcast to all clients with throttling
-function broadcast(data = {}) {
+function broadcast(data = {}, priority = false) {
   const now = Date.now();
   
   // Clear expired sword swings
@@ -111,6 +111,12 @@ function broadcast(data = {}) {
     if (player.isSwinging && now > player.swingEndTime) {
       player.isSwinging = false;
     }
+  }
+  
+  // For high priority events (combat), bypass throttling
+  if (priority) {
+    performBroadcast(data);
+    return;
   }
   
   // If we just broadcasted recently, schedule a delayed broadcast
@@ -148,6 +154,7 @@ function performBroadcast(data = {}) {
       name: player.name,
       facing: player.facing,
       isSwinging: player.isSwinging,
+      swingStartTime: player.swingStartTime, // Include swing start time for proper client sync
       swingEndTime: player.swingEndTime, // Include swing end time for proper client sync
       health: player.health,
       maxHealth: player.maxHealth
@@ -184,6 +191,7 @@ wss.on('connection', ws => {
     name: playerName,
     facing: 'down', // Track facing direction: 'up', 'down', 'left', 'right'
     isSwinging: false,
+    swingStartTime: 0,
     swingEndTime: 0,
     health: 20,
     maxHealth: 20
@@ -214,6 +222,11 @@ wss.on('connection', ws => {
         const canvasWidth = data.canvasWidth || 800;
         const canvasHeight = data.canvasHeight || 600;
         
+        // Store old position for change detection
+        const oldX = p.x;
+        const oldY = p.y;
+        const oldFacing = p.facing;
+        
         // Keep players within canvas bounds (subtract 32 for sprite size)
         const newX = Math.max(11, Math.min(canvasWidth - 21, p.x + data.dx));
         const newY = Math.max(11, Math.min(canvasHeight - 21, p.y + data.dy));
@@ -227,8 +240,10 @@ wss.on('connection', ws => {
         else if (data.dy > 0) p.facing = 'down';
         else if (data.dy < 0) p.facing = 'up';
         
-        // Broadcast updated state to all clients with throttling
-        broadcast({ scores: playerScores });
+        // Only broadcast if position or facing actually changed
+        if (oldX !== newX || oldY !== newY || oldFacing !== p.facing) {
+          broadcast({ scores: playerScores });
+        }
       }
       
       if (data.type === 'sword_swing') {
@@ -237,6 +252,7 @@ wss.on('connection', ws => {
         
         // Set sword swing state
         p.isSwinging = true;
+        p.swingStartTime = Date.now(); // Track when swing started
         p.swingEndTime = Date.now() + 300; // Swing lasts 300ms
         
         // Check for enemies in sword range
@@ -245,7 +261,7 @@ wss.on('connection', ws => {
         console.log(`⚔️ Player ${id} swings sword facing ${p.facing}!`);
         
         // Broadcast updated state with immediate priority for combat
-        broadcast({ scores: playerScores });
+        broadcast({ scores: playerScores }, true); // High priority for combat
         
         if (swordCollisions > 0) {
           const remainingEnemies = Object.keys(enemies).length;
@@ -256,7 +272,7 @@ wss.on('connection', ws => {
           if (remainingEnemies === 0) {
             console.log('🔄 All enemies defeated! Respawning...');
             spawnEnemies();
-            broadcast({ scores: playerScores }); // Immediate broadcast for respawn
+            broadcast({ scores: playerScores }, true); // High priority for respawn
           }
         }
       }

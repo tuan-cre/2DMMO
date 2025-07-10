@@ -154,7 +154,7 @@
     
     // Client-side prediction and lag compensation
     let lastMoveTime = 0;
-    const MOVE_THROTTLE = 42; // Limit move commands to 24fps for consistent performance
+    const MOVE_THROTTLE = 50; // Reduced frequency for smoother local movement
     let pendingMoves = [];
     
     // Animation tracking
@@ -329,28 +329,47 @@
         // Merge server data with client prediction
         for (let id in data.players) {
           if (id === selfId) {
-            // For self, only update if server position differs significantly
+            // For self, use more sophisticated prediction reconciliation
             const serverPlayer = data.players[id];
             const clientPlayer = players[id];
             if (clientPlayer) {
               const dx = Math.abs(serverPlayer.x - clientPlayer.x);
               const dy = Math.abs(serverPlayer.y - clientPlayer.y);
-              if (dx > 10 || dy > 10) {
-                // Server correction needed
-                players[id] = serverPlayer;
-              } else {
-                // Keep client prediction, but update non-position data
-                players[id].health = serverPlayer.health;
-                players[id].maxHealth = serverPlayer.maxHealth;
-                players[id].isSwinging = serverPlayer.isSwinging;
-                players[id].swingEndTime = serverPlayer.swingEndTime; // Sync swing timing
+              
+              // Only reconcile if there's a significant difference (smoothly)
+              if (dx > 30 || dy > 30) {
+                // Large difference - snap to server position
+                players[id].x = serverPlayer.x;
+                players[id].y = serverPlayer.y;
+              } else if (dx > 5 || dy > 5) {
+                // Small difference - smoothly interpolate
+                players[id].x += (serverPlayer.x - clientPlayer.x) * 0.3;
+                players[id].y += (serverPlayer.y - clientPlayer.y) * 0.3;
+              }
+              // Otherwise keep client prediction
+              
+              // Always update non-position data from server
+              players[id].health = serverPlayer.health;
+              players[id].maxHealth = serverPlayer.maxHealth;
+              players[id].facing = serverPlayer.facing;
+              players[id].isSwinging = serverPlayer.isSwinging;
+              players[id].swingStartTime = serverPlayer.swingStartTime;
+              if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
+                players[id].swingEndTime = serverPlayer.swingStartTime + 300;
               }
             } else {
+              // First time seeing this player
               players[id] = serverPlayer;
+              if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
+                players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+              }
             }
           } else {
-            // For other players, use server data
+            // For other players, use server data directly
             players[id] = data.players[id];
+            if (data.players[id].isSwinging && data.players[id].swingStartTime) {
+              players[id].swingEndTime = data.players[id].swingStartTime + 300;
+            }
           }
         }
         
@@ -384,10 +403,10 @@
       lastMoveTime = now;
       
       const moveMap = {
-        up: [0, -8],
-        down: [0, 8],
-        left: [-8, 0],
-        right: [8, 0]
+        up: [0, -10],    // Increased movement speed
+        down: [0, 10],
+        left: [-10, 0],
+        right: [10, 0]
       };
       
       if (moveMap[direction]) {
@@ -396,26 +415,31 @@
         
         // Client-side prediction: update our own position immediately
         if (selfId && players[selfId]) {
-          const newX = Math.max(11, Math.min(canvas.width - 21, players[selfId].x + dx));
-          const newY = Math.max(11, Math.min(canvas.height - 21, players[selfId].y + dy));
-          players[selfId].x = newX;
-          players[selfId].y = newY;
+          const currentPlayer = players[selfId];
+          const newX = Math.max(11, Math.min(canvas.width - 21, currentPlayer.x + dx));
+          const newY = Math.max(11, Math.min(canvas.height - 21, currentPlayer.y + dy));
           
-          // Update facing direction immediately
-          if (dx > 0) players[selfId].facing = 'right';
-          else if (dx < 0) players[selfId].facing = 'left';
-          else if (dy > 0) players[selfId].facing = 'down';
-          else if (dy < 0) players[selfId].facing = 'up';
+          // Only update if the position actually changed
+          if (newX !== currentPlayer.x || newY !== currentPlayer.y) {
+            players[selfId].x = newX;
+            players[selfId].y = newY;
+            
+            // Update facing direction immediately
+            if (dx > 0) players[selfId].facing = 'right';
+            else if (dx < 0) players[selfId].facing = 'left';
+            else if (dy > 0) players[selfId].facing = 'down';
+            else if (dy < 0) players[selfId].facing = 'up';
+            
+            // Send to server
+            ws.send(JSON.stringify({ 
+              type: "move", 
+              dx: dx, 
+              dy: dy,
+              canvasWidth: canvas.width,
+              canvasHeight: canvas.height
+            }));
+          }
         }
-        
-        // Send to server
-        ws.send(JSON.stringify({ 
-          type: "move", 
-          dx: dx, 
-          dy: dy,
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height
-        }));
       }
     }
 
@@ -439,6 +463,13 @@
     
     // Sword swing function
     function swingSword() {
+      // Client-side prediction: immediately show sword swing for self
+      if (selfId && players[selfId]) {
+        players[selfId].isSwinging = true;
+        players[selfId].swingStartTime = Date.now();
+        players[selfId].swingEndTime = Date.now() + 300;
+      }
+      
       ws.send(JSON.stringify({ type: "sword_swing" }));
     }
 
@@ -486,8 +517,8 @@
       for (let id in players) {
         const p = players[id];
         
-        // Update swing state based on server time
-        if (p.isSwinging && Date.now() > p.swingEndTime) {
+        // Update swing state based on duration (more reliable than server time)
+        if (p.isSwinging && p.swingEndTime && Date.now() > p.swingEndTime) {
           p.isSwinging = false;
         }
         
