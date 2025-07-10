@@ -181,6 +181,10 @@
         { type: 'sprites', name: 'player_other1', src: 'assets/sprites/player_other1.png' },
         { type: 'sprites', name: 'player_other2', src: 'assets/sprites/player_other2.png' },
         { type: 'sprites', name: 'enemy', src: 'assets/sprites/enemy.png' },
+        { type: 'sprites', name: 'sword_up', src: 'assets/sprites/sword_up.png' },
+        { type: 'sprites', name: 'sword_down', src: 'assets/sprites/sword_down.png' },
+        { type: 'sprites', name: 'sword_left', src: 'assets/sprites/sword_left.png' },
+        { type: 'sprites', name: 'sword_right', src: 'assets/sprites/sword_right.png' },
         { type: 'backgrounds', name: 'grass', src: 'assets/backgrounds/grass_tile.png' }
       ];
       
@@ -188,19 +192,27 @@
       const totalAssets = assetsToLoad.length;
       
       // Create fallback sprites if images don't exist
-      function createFallbackSprite(color, size = 32) {
+      function createFallbackSprite(color, size = 32, type = 'character') {
         const fallbackCanvas = document.createElement('canvas');
         fallbackCanvas.width = size;
         fallbackCanvas.height = size;
         const fallbackCtx = fallbackCanvas.getContext('2d');
         
-        // Draw a simple character sprite
-        fallbackCtx.fillStyle = color;
-        fallbackCtx.fillRect(6, 6, 20, 20);
-        fallbackCtx.fillStyle = '#333';
-        fallbackCtx.fillRect(8, 8, 4, 4); // Eyes
-        fallbackCtx.fillRect(14, 8, 4, 4);
-        fallbackCtx.fillRect(10, 16, 6, 2); // Mouth
+        if (type === 'sword') {
+          // Draw a simple sword
+          fallbackCtx.fillStyle = '#C0C0C0'; // Silver handle
+          fallbackCtx.fillRect(14, 20, 4, 8);
+          fallbackCtx.fillStyle = '#FFD700'; // Gold blade
+          fallbackCtx.fillRect(15, 4, 2, 16);
+        } else {
+          // Draw a simple character sprite
+          fallbackCtx.fillStyle = color;
+          fallbackCtx.fillRect(6, 6, 20, 20);
+          fallbackCtx.fillStyle = '#333';
+          fallbackCtx.fillRect(8, 8, 4, 4); // Eyes
+          fallbackCtx.fillRect(14, 8, 4, 4);
+          fallbackCtx.fillRect(10, 16, 6, 2); // Mouth
+        }
         
         return fallbackCanvas;
       }
@@ -242,15 +254,19 @@
           console.log(`Failed to load ${asset.src}, using fallback`);
           // Use fallback sprites
           if (asset.type === 'sprites') {
-            let color;
-            if (asset.name.includes('self')) {
-              color = '#00FF00';
-            } else if (asset.name === 'enemy') {
-              color = '#FF0000';
+            if (asset.name.startsWith('sword_')) {
+              assets[asset.type][asset.name] = createFallbackSprite('#FFD700', 32, 'sword');
             } else {
-              color = '#00FFFF';
+              let color;
+              if (asset.name.includes('self')) {
+                color = '#00FF00';
+              } else if (asset.name === 'enemy') {
+                color = '#FF0000';
+              } else {
+                color = '#00FFFF';
+              }
+              assets[asset.type][asset.name] = createFallbackSprite(color);
             }
-            assets[asset.type][asset.name] = createFallbackSprite(color);
           } else if (asset.type === 'backgrounds') {
             assets[asset.type][asset.name] = createFallbackBackground();
           }
@@ -583,51 +599,87 @@
       
       // Draw sword swing effect
       function drawSwordSwing(player) {
-        ctx.strokeStyle = '#FFD700'; // Gold color for sword
-        ctx.lineWidth = 3;
-        ctx.lineCap = 'round';
+        if (!assets.loaded) return;
         
-        const swordLength = 15; // Reduced from 25 to match server range
-        let startX = player.x + 5; // Center of player
-        let startY = player.y + 5;
-        let endX = startX;
-        let endY = startY;
+        // Get the appropriate sword sprite based on facing direction
+        let swordSprite;
+        let swordX = player.x;
+        let swordY = player.y;
         
-        // Calculate sword position based on facing direction
         switch(player.facing) {
           case 'up':
-            startY = player.y - 5;
-            endX = startX;
-            endY = startY - swordLength;
+            swordSprite = assets.sprites.sword_up;
+            swordX = player.x - 11; // Center horizontally
+            swordY = player.y - 32; // Position above player
             break;
           case 'down':
-            startY = player.y + 15;
-            endX = startX;
-            endY = startY + swordLength;
+            swordSprite = assets.sprites.sword_down;
+            swordX = player.x - 11; // Center horizontally
+            swordY = player.y + 11; // Position below player
             break;
           case 'left':
-            startX = player.x - 5;
-            endX = startX - swordLength;
-            endY = startY;
+            swordSprite = assets.sprites.sword_left;
+            swordX = player.x - 32; // Position to the left
+            swordY = player.y - 11; // Center vertically
             break;
           case 'right':
-            startX = player.x + 15;
-            endX = startX + swordLength;
-            endY = startY;
+            swordSprite = assets.sprites.sword_right;
+            swordX = player.x + 11; // Position to the right
+            swordY = player.y - 11; // Center vertically
             break;
         }
         
-        // Draw sword line
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-        
-        // Draw sword tip (small circle)
-        ctx.fillStyle = '#C0C0C0'; // Silver tip
-        ctx.beginPath();
-        ctx.arc(endX, endY, 2, 0, Math.PI * 2);
-        ctx.fill();
+        // Draw the sword sprite if available
+        if (swordSprite) {
+          ctx.drawImage(swordSprite, swordX, swordY, 32, 32);
+        } else {
+          // Fallback to the old line drawing if sprite not available
+          ctx.strokeStyle = '#FFD700'; // Gold color for sword
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          
+          const swordLength = 15;
+          let startX = player.x + 5; // Center of player
+          let startY = player.y + 5;
+          let endX = startX;
+          let endY = startY;
+          
+          // Calculate sword position based on facing direction
+          switch(player.facing) {
+            case 'up':
+              startY = player.y - 5;
+              endX = startX;
+              endY = startY - swordLength;
+              break;
+            case 'down':
+              startY = player.y + 15;
+              endX = startX;
+              endY = startY + swordLength;
+              break;
+            case 'left':
+              startX = player.x - 5;
+              endX = startX - swordLength;
+              endY = startY;
+              break;
+            case 'right':
+              startX = player.x + 15;
+              endX = startX + swordLength;
+              endY = startY;
+              break;
+          }
+          
+          // Draw sword line
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+          
+          // Draw sword tip (small circle)
+          ctx.fillStyle = '#C0C0C0'; // Silver tip
+          ctx.beginPath();
+          ctx.arc(endX, endY, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       
       // Draw enemies
