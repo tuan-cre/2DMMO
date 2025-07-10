@@ -1,1 +1,175 @@
-sadasd
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MiniMMO</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      background: #fff;
+      display: block;
+      border: none;
+    }
+    
+    /* Mobile D-pad styles */
+    .dpad {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      display: none;
+    }
+    
+    .dpad-button {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    
+    .dpad-button:active {
+      background: rgba(0, 0, 0, 0.8);
+    }
+    
+    .dpad-up { top: 0; left: 40px; }
+    .dpad-down { bottom: 0; left: 40px; }
+    .dpad-left { top: 40px; left: 0; }
+    .dpad-right { top: 40px; right: 0; }
+    
+    /* Show D-pad on mobile devices */
+    @media (max-width: 768px), (pointer: coarse) {
+      .dpad {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  
+  <!-- Mobile D-pad -->
+  <div class="dpad">
+    <div class="dpad-button dpad-up" data-direction="up">↑</div>
+    <div class="dpad-button dpad-down" data-direction="down">↓</div>
+    <div class="dpad-button dpad-left" data-direction="left">←</div>
+    <div class="dpad-button dpad-right" data-direction="right">→</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let players = {};
+    let selfId = null;
+    
+    // Set canvas size to full screen
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    
+    // Initial resize and listen for window resize
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Connect to server
+    const ws = new WebSocket("ws://" + location.host);
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.players) {
+        players = data.players;
+      }
+      if (data.id && !selfId) {
+        selfId = data.id;
+      }
+    };
+
+    // Movement function
+    function movePlayer(direction) {
+      const moveMap = {
+        up: [0, -5],
+        down: [0, 5],
+        left: [-5, 0],
+        right: [5, 0]
+      };
+      
+      if (moveMap[direction]) {
+        ws.send(JSON.stringify({ 
+          type: "move", 
+          dx: moveMap[direction][0], 
+          dy: moveMap[direction][1],
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height
+        }));
+      }
+    }
+
+    // Keyboard controls
+    window.addEventListener('keydown', e => {
+      const keyMap = {
+        ArrowUp: 'up',
+        ArrowDown: 'down',
+        ArrowLeft: 'left',
+        ArrowRight: 'right'
+      };
+      
+      if (keyMap[e.key]) {
+        movePlayer(keyMap[e.key]);
+      }
+    });
+
+    // Touch controls for mobile D-pad
+    document.querySelectorAll('.dpad-button').forEach(button => {
+      // Touch events
+      button.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const direction = button.getAttribute('data-direction');
+        movePlayer(direction);
+      });
+      
+      // Mouse events for testing on desktop
+      button.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const direction = button.getAttribute('data-direction');
+        movePlayer(direction);
+      });
+    });
+
+    // Draw loop
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let id in players) {
+        const p = players[id];
+        
+        // Draw player rectangle
+        ctx.fillStyle = id === selfId ? 'lime' : 'cyan';
+        ctx.fillRect(p.x, p.y, 10, 10);
+        
+        // Draw player name above the character
+        ctx.fillStyle = 'black';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name || 'Player', p.x + 5, p.y - 5);
+      }
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+  </script>
+</body>
+</html>
