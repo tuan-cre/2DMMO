@@ -154,7 +154,7 @@
     
     // Client-side prediction and lag compensation
     let lastMoveTime = 0;
-    const MOVE_THROTTLE = 100; // Slower updates to reduce server conflicts
+    const MOVE_THROTTLE = 50; // Faster movement response
     let pendingMoves = [];
     
     // Animation tracking
@@ -337,7 +337,7 @@
               // Calculate time since last move to determine if we should trust client or server
               const timeSinceLastMove = Date.now() - lastMoveTime;
               
-              if (timeSinceLastMove > 200) {
+              if (timeSinceLastMove > 150) { // Reduced from 200ms for faster updates
                 // Been a while since we moved, trust server position
                 players[id] = { ...serverPlayer };
               } else {
@@ -347,7 +347,7 @@
                 players[id].name = serverPlayer.name;
                 
                 // Only update facing if it's different and we're not currently moving
-                if (timeSinceLastMove > 100) {
+                if (timeSinceLastMove > 75) { // Reduced from 100ms
                   players[id].facing = serverPlayer.facing;
                 }
                 
@@ -404,10 +404,10 @@
       lastMoveTime = now;
       
       const moveMap = {
-        up: [0, -10],    // Increased movement speed
-        down: [0, 10],
-        left: [-10, 0],
-        right: [10, 0]
+        up: [0, -12],    // Increased movement speed for better responsiveness
+        down: [0, 12],
+        left: [-12, 0],
+        right: [12, 0]
       };
       
       if (moveMap[direction]) {
