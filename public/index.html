@@ -356,6 +356,10 @@
               if (timeSinceLastMove > 150) { // Reduced from 200ms for faster updates
                 // Been a while since we moved, trust server position
                 players[id] = { ...serverPlayer };
+                // Always sync swing data from server
+                if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
+                  players[id].swingEndTime = serverPlayer.swingStartTime + 300;
+                }
               } else {
                 // Recently moved, keep client position but update other data
                 players[id].health = serverPlayer.health;
@@ -367,7 +371,7 @@
                   players[id].facing = serverPlayer.facing;
                 }
                 
-                // Handle swing state
+                // Always handle swing state from server for proper sync
                 players[id].isSwinging = serverPlayer.isSwinging;
                 players[id].swingStartTime = serverPlayer.swingStartTime;
                 if (serverPlayer.isSwinging && serverPlayer.swingStartTime) {
@@ -382,7 +386,7 @@
               }
             }
           } else {
-            // For other players, use server data directly
+            // For other players, always use server data and ensure swing timing is set
             players[id] = { ...data.players[id] };
             if (data.players[id].isSwinging && data.players[id].swingStartTime) {
               players[id].swingEndTime = data.players[id].swingStartTime + 300;
@@ -480,7 +484,7 @@
     
     // Sword swing function
     function swingSword() {
-      // Client-side prediction: immediately show sword swing for self
+      // Client-side prediction: immediately show sword swing for self only
       if (selfId && players[selfId]) {
         players[selfId].isSwinging = true;
         players[selfId].swingStartTime = Date.now();
@@ -534,7 +538,7 @@
       for (let id in players) {
         const p = players[id];
         
-        // Update swing state based on duration (more reliable than server time)
+        // Update swing state based on duration for all players
         if (p.isSwinging && p.swingEndTime && Date.now() > p.swingEndTime) {
           p.isSwinging = false;
         }
@@ -599,8 +603,6 @@
       
       // Draw sword swing effect
       function drawSwordSwing(player) {
-        if (!assets.loaded) return;
-        
         // Get the appropriate sword sprite based on facing direction
         let swordSprite;
         let swordX = player.x;
@@ -608,22 +610,22 @@
         
         switch(player.facing) {
           case 'up':
-            swordSprite = assets.sprites.sword_up;
+            swordSprite = assets.loaded ? assets.sprites.sword_up : null;
             swordX = player.x - 11; // Center horizontally
             swordY = player.y - 32; // Position above player
             break;
           case 'down':
-            swordSprite = assets.sprites.sword_down;
+            swordSprite = assets.loaded ? assets.sprites.sword_down : null;
             swordX = player.x - 11; // Center horizontally
             swordY = player.y + 11; // Position below player
             break;
           case 'left':
-            swordSprite = assets.sprites.sword_left;
+            swordSprite = assets.loaded ? assets.sprites.sword_left : null;
             swordX = player.x - 32; // Position to the left
             swordY = player.y - 11; // Center vertically
             break;
           case 'right':
-            swordSprite = assets.sprites.sword_right;
+            swordSprite = assets.loaded ? assets.sprites.sword_right : null;
             swordX = player.x + 11; // Position to the right
             swordY = player.y - 11; // Center vertically
             break;
