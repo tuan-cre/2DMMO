@@ -762,38 +762,43 @@
 
     // Draw tiles based on map data
     function drawTiles() {
-      const tileData = gameState.map.tileData;
-      if (!tileData || !tileData.tileMap) return;
+      // Get tile data directly from map, not from tileData property
+      if (!gameState.map || !gameState.map.tileMap || !gameState.map.tileTypes) {
+        return;
+      }
       
-      const tileSize = tileData.tileSize || 32;
-      const tileMap = tileData.tileMap;
-      const tileTypes = tileData.tileTypes || {};
+      const tileSize = gameState.map.tileSize || 32;
+      const tileMap = gameState.map.tileMap;
+      const tileTypes = gameState.map.tileTypes;
       
-      // Calculate which tiles are visible on screen
+      // Calculate which tiles are visible on screen with proper bounds checking
       const startTileX = Math.max(0, Math.floor(camera.x / tileSize));
-      const endTileX = Math.min(tileMap[0].length - 1, Math.ceil((camera.x + canvas.width) / tileSize));
+      const endTileX = Math.min(tileMap[0] ? tileMap[0].length - 1 : 0, Math.ceil((camera.x + canvas.width) / tileSize));
       const startTileY = Math.max(0, Math.floor(camera.y / tileSize));
       const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + canvas.height) / tileSize));
       
       // Only draw visible tiles for better performance
       for (let y = startTileY; y <= endTileY; y++) {
         for (let x = startTileX; x <= endTileX; x++) {
-          const tileType = tileMap[y][x];
-          const tileTypeData = tileTypes[tileType];
-          
-          if (!tileTypeData) continue;
-          
-          const drawX = x * tileSize - camera.x;
-          const drawY = y * tileSize - camera.y;
-          
-          // Try to draw sprite first
-          if (assets.loaded && assets.tiles && assets.tiles[tileType]) {
-            ctx.drawImage(assets.tiles[tileType], drawX, drawY, tileSize, tileSize);
-          } else {
-            // Fallback to color
-            const color = tileTypeData.color || '#4a7c59';
-            ctx.fillStyle = color;
-            ctx.fillRect(drawX, drawY, tileSize, tileSize);
+          // Ensure we have a valid tile coordinate
+          if (y >= 0 && y < tileMap.length && x >= 0 && x < tileMap[y].length) {
+            const tileType = tileMap[y][x];
+            const tileTypeData = tileTypes[tileType];
+            
+            if (!tileTypeData) continue;
+            
+            const drawX = x * tileSize - camera.x;
+            const drawY = y * tileSize - camera.y;
+            
+            // Try to draw sprite first
+            if (assets.loaded && assets.tiles && assets.tiles[tileType]) {
+              ctx.drawImage(assets.tiles[tileType], drawX, drawY, tileSize, tileSize);
+            } else {
+              // Fallback to color
+              const color = tileTypeData.color || '#4a7c59';
+              ctx.fillStyle = color;
+              ctx.fillRect(drawX, drawY, tileSize, tileSize);
+            }
           }
         }
       }
@@ -820,7 +825,7 @@
       }
       
       // Draw tiles if map data is available
-      if (gameState.map && gameState.map.tileData) {
+      if (gameState.map && gameState.map.tileMap) {
         drawTiles();
       }
       
