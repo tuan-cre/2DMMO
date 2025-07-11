@@ -5,38 +5,24 @@ class MapManager {
   constructor() {
     this.maps = new Map();
     this.currentMapId = null;
+    
+    // Load custom maps first (they take priority)
+    this.loadCustomMaps();
+    
+    // Then load default maps
     this.loadDefaultMaps();
+
+    // Set default map (prefer custom_map if it exists, otherwise use first available)
+    if (this.maps.has('custom_map')) {
+      this.currentMapId = 'custom_map';
+    } else if (this.maps.size > 0) {
+      this.currentMapId = Array.from(this.maps.keys())[0];
+    }
   }
 
   // Load predefined maps
   loadDefaultMaps() {
-    // Default grass field map
-    const grassFieldMap = {
-      id: 'grass_field',
-      name: 'Grass Field',
-      width: 800,
-      height: 600,
-      backgroundColor: '#2d5a27',
-      backgroundImage: 'assets/backgrounds/grass_tile.png',
-      playerSpawnPoints: [
-        { x: 100, y: 100 },
-        { x: 700, y: 100 },
-        { x: 100, y: 500 },
-        { x: 700, y: 500 },
-        { x: 400, y: 300 }
-      ],
-      enemySpawnPoints: [
-        { x: 200, y: 150 },
-        { x: 600, y: 150 },
-        { x: 200, y: 450 },
-        { x: 600, y: 450 },
-        { x: 400, y: 300 }
-      ],
-      obstacles: [],
-      boundaries: { minX: 11, minY: 11, maxX: 789, maxY: 589 }
-    };
-
-    // Arena map with obstacles
+    // Battle Arena map with obstacles
     const arenaMap = {
       id: 'arena',
       name: 'Battle Arena',
@@ -125,14 +111,36 @@ class MapManager {
       boundaries: { minX: 11, minY: 11, maxX: 389, maxY: 389 }
     };
 
-    // Register all maps
-    this.registerMap(grassFieldMap);
-    this.registerMap(arenaMap);
-    this.registerMap(forestMap);
-    this.registerMap(duelMap);
+    // Register predefined maps (only if they don't already exist)
+    if (!this.maps.has('arena')) this.registerMap(arenaMap);
+    if (!this.maps.has('forest')) this.registerMap(forestMap);
+    if (!this.maps.has('duel')) this.registerMap(duelMap);
+  }
 
-    // Set default map
-    this.currentMapId = 'grass_field';
+  // Load custom maps from files
+  loadCustomMaps() {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      // Load custom_map.json
+      const customMapPath = path.join(__dirname, '..', 'maps', 'custom_map.json');
+      if (fs.existsSync(customMapPath)) {
+        const customMapData = JSON.parse(fs.readFileSync(customMapPath, 'utf8'));
+        this.registerMap(customMapData);
+        console.log('✅ Loaded custom_map.json');
+      }
+      
+      // Load forest_theme.json
+      const forestMapPath = path.join(__dirname, '..', 'maps', 'forest_theme.json');
+      if (fs.existsSync(forestMapPath)) {
+        const forestMapData = JSON.parse(fs.readFileSync(forestMapPath, 'utf8'));
+        this.registerMap(forestMapData);
+        console.log('✅ Loaded forest_theme.json');
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not load custom maps:', error.message);
+    }
   }
 
   // Register a new map

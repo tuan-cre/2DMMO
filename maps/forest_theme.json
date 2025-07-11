@@ -1,0 +1,99 @@
+{
+  "id": "forest_theme",
+  "name": "Forest Theme Map",
+  "width": 800,
+  "height": 600,
+  "backgroundColor": "#1a4d1a",
+  "tileSize": 32,
+  "tileTypes": {
+    "grass": { 
+      "sprite": "assets/tiles/forest_grass.png", 
+      "walkable": true, 
+      "color": "#2d5a27",
+      "movementSpeed": 1.0
+    },
+    "tree": { 
+      "sprite": "assets/tiles/tree_trunk.png", 
+      "walkable": false, 
+      "color": "#4a4a00",
+      "collision": true
+    },
+    "path": { 
+      "sprite": "assets/tiles/dirt_path.png", 
+      "walkable": true, 
+      "color": "#8b4513",
+      "movementSpeed": 1.2
+    },
+    "rocks": { 
+      "sprite": "assets/tiles/forest_rocks.png", 
+      "walkable": false, 
+      "color": "#666666",
+      "collision": true
+    },
+    "water": { 
+      "sprite": "assets/tiles/forest_stream.png", 
+      "walkable": false, 
+      "color": "#1e3a8a",
+      "collision": true
+    }
+  },
+  "tileMap": [
+    ["grass", "grass", "tree", "grass", "grass", "tree", "grass", "grass"],
+    ["grass", "path", "path", "path", "path", "path", "path", "grass"],
+    ["tree", "path", "grass", "rocks", "grass", "grass", "path", "tree"],
+    ["grass", "path", "grass", "grass", "water", "water", "path", "grass"],
+    ["grass", "path", "grass", "grass", "water", "water", "path", "grass"],
+    ["tree", "path", "grass", "grass", "grass", "rocks", "path", "tree"],
+    ["grass", "path", "path", "path", "path", "path", "path", "grass"],
+    ["grass", "grass", "tree", "grass", "grass", "tree", "grass", "grass"]
+  ],
+  "playerSpawnPoints": [
+    { "x": 64, "y": 64 },
+    { "x": 736, "y": 64 },
+    { "x": 64, "y": 536 },
+    { "x": 736, "y": 536 }
+  ],
+  "enemySpawnPoints": [
+    { "x": 256, "y": 192 },
+    { "x": 544, "y": 192 },
+    { "x": 256, "y": 408 },
+    { "x": 544, "y": 408 },
+    { "x": 400, "y": 300 }
+  ],
+  "resourceMap": {
+    "playerSprites": {
+      "self": [
+        "assets/sprites/forest/ranger_walk1.png",
+        "assets/sprites/forest/ranger_walk2.png"
+      ],
+      "other": [
+        "assets/sprites/forest/explorer_walk1.png", 
+        "assets/sprites/forest/explorer_walk2.png"
+      ]
+    },
+    "enemySprites": [
+      "assets/sprites/forest/wolf.png",
+      "assets/sprites/forest/bear.png"
+    ],
+    "weaponSprites": {
+      "sword_up": "assets/sprites/forest/bow_up.png",
+      "sword_down": "assets/sprites/forest/bow_down.png",
+      "sword_left": "assets/sprites/forest/bow_left.png",
+      "sword_right": "assets/sprites/forest/bow_right.png"
+    },
+    "objects": [
+      { "type": "campfire", "sprite": "assets/objects/campfire.png", "x": 400, "y": 300 },
+      { "type": "chest", "sprite": "assets/objects/treasure_chest.png", "x": 100, "y": 500 }
+    ],
+    "audio": {
+      "background": "assets/audio/forest_ambience.mp3",
+      "footsteps": "assets/audio/leaves_rustle.wav",
+      "combat": "assets/audio/bow_shot.wav"
+    }
+  },
+  "obstacles": [
+    { "x": 256, "y": 96, "width": 32, "height": 32, "type": "tree" },
+    { "x": 512, "y": 96, "width": 32, "height": 32, "type": "tree" },
+    { "x": 320, "y": 224, "width": 32, "height": 32, "type": "rocks" }
+  ]
+}

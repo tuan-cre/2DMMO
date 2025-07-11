@@ -252,6 +252,16 @@ class GameServer {
     };
   }
 
+  // Helper method to get client WebSocket by player ID
+  getClientByPlayerId(playerId) {
+    for (const client of this.wss.clients) {
+      if (client.playerId === playerId && client.readyState === require('ws').OPEN) {
+        return client;
+      }
+    }
+    return null;
+  }
+
   handlePlayerMove(playerId, data) {
     const player = this.players.get(playerId);
     if (!player) return;
@@ -260,6 +270,32 @@ class GameServer {
     const canvasWidth = data.canvasWidth || currentMap.width;
     const canvasHeight = data.canvasHeight || currentMap.height;
     
+    // Calculate new position
+    const newX = Math.max(11, Math.min(canvasWidth - 21, player.x + data.dx));
+    const newY = Math.max(11, Math.min(canvasHeight - 21, player.y + data.dy));
+    
+    // Check for collisions at the new position
+    const playerRadius = 10; // Player collision radius
+    if (currentMap.checkCollision(newX, newY, playerRadius)) {
+      // Collision detected, send position correction to client (fallback for client-side prediction failures)
+      const client = this.getClientByPlayerId(playerId);
+      if (client) {
+        // Only send correction if player actually moved to a different position
+        const distanceMoved = Math.sqrt(Math.pow(newX - player.x, 2) + Math.pow(newY - player.y, 2));
+        if (distanceMoved > 1) { // Only send correction if significant movement was attempted
+          console.log(`🚫 Server collision detected at (${newX}, ${newY}), correcting player ${playerId}`);
+          client.send(JSON.stringify({
+            type: 'position_correction',
+            x: player.x,
+            y: player.y,
+            facing: player.facing
+          }));
+        }
+      }
+      return;
+    }
+    
+    // No collision, allow movement
     const positionChanged = player.move(data.dx, data.dy, canvasWidth, canvasHeight);
     
     if (positionChanged) {
@@ -346,6 +382,9 @@ class GameServer {
     this.wss.on('connection', ws => {
       const id = this.generatePlayerId();
       const playerName = this.generatePlayerName();
+      
+      // Store player ID on the WebSocket connection for later reference
+      ws.playerId = id;
       
       // Get spawn point from current map
       const currentMap = this.mapManager.getCurrentMap();

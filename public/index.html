@@ -150,6 +150,7 @@
     let players = {};
     let enemies = {};
     let playerScores = {};
+    let gameState = { map: null };
     let selfId = null;
     
     // Client-side prediction and lag compensation
@@ -170,6 +171,7 @@
     const assets = {
       sprites: {},
       backgrounds: {},
+      tiles: {},
       loaded: false
     };
     
@@ -185,7 +187,9 @@
         { type: 'sprites', name: 'sword_down', src: 'assets/sprites/sword_down.png' },
         { type: 'sprites', name: 'sword_left', src: 'assets/sprites/sword_left.png' },
         { type: 'sprites', name: 'sword_right', src: 'assets/sprites/sword_right.png' },
-        { type: 'backgrounds', name: 'grass', src: 'assets/backgrounds/grass_tile.png' }
+        { type: 'backgrounds', name: 'grass', src: 'assets/backgrounds/grass_tile.png' },
+        { type: 'tiles', name: 'grass', src: 'assets/tiles/grass.png' },
+        { type: 'tiles', name: 'rocks', src: 'assets/tiles/rocks.png' }
       ];
       
       let loadedCount = 0;
@@ -314,8 +318,14 @@
     
     // Set canvas size to full screen
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // Use map dimensions if available, otherwise use window size
+      if (gameState.map && gameState.map.width && gameState.map.height) {
+        canvas.width = gameState.map.width;
+        canvas.height = gameState.map.height;
+      } else {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
     }
     
     // Initial resize and listen for window resize
@@ -328,6 +338,23 @@
 
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
+      
+      // Handle position correction from server (when movement is blocked)
+      if (data.type === 'position_correction' && selfId) {
+        if (players[selfId]) {
+          // Only apply position correction if there's a significant difference
+          const dx = Math.abs(players[selfId].x - data.x);
+          const dy = Math.abs(players[selfId].y - data.y);
+          
+          if (dx > 5 || dy > 5) { // Only correct if difference is more than 5 pixels
+            players[selfId].x = data.x;
+            players[selfId].y = data.y;
+            players[selfId].facing = data.facing;
+            console.log(`Position corrected to (${data.x}, ${data.y})`);
+          }
+        }
+        return;
+      }
       
       // Debug: Log when we receive player data with sword swings
       if (data.players) {
@@ -429,10 +456,55 @@
         playerScores = data.scores;
         updateScoreboard();
       }
+      if (data.map) {
+        gameState.map = data.map;
+        console.log('Map data received:', data.map);
+        resizeCanvas(); // Resize canvas to match map dimensions
+      }
       if (data.id && !selfId) {
         selfId = data.id;
       }
     };
+
+    // Client-side collision detection
+    function checkClientCollision(x, y, radius = 10) {
+      // Check if we have map data
+      if (!gameState.map || !gameState.map.tileMap || !gameState.map.tileTypes) {
+        return false;
+      }
+      
+      const map = gameState.map;
+      const tileSize = map.tileSize || 32;
+      
+      // Check bounds first (match server-side logic)
+      if (x < 0 || y < 0 || x >= map.width || y >= map.height) {
+        return true;
+      }
+      
+      // Calculate tile coordinates for the player's bounding box
+      const leftTile = Math.floor((x - radius) / tileSize);
+      const rightTile = Math.floor((x + radius) / tileSize);
+      const topTile = Math.floor((y - radius) / tileSize);
+      const bottomTile = Math.floor((y + radius) / tileSize);
+      
+      // Check all tiles that the player overlaps with
+      for (let tileY = topTile; tileY <= bottomTile; tileY++) {
+        for (let tileX = leftTile; tileX <= rightTile; tileX++) {
+          // Check if tile coordinates are valid
+          if (tileY >= 0 && tileY < map.tilesY && tileX >= 0 && tileX < map.tilesX) {
+            const tileType = map.tileMap[tileY][tileX];
+            const tileData = map.tileTypes[tileType];
+            
+            // Check if tile is not walkable (match server-side logic exactly)
+            if (tileData && (!tileData.walkable || tileData.collision)) {
+              return true; // Collision detected
+            }
+          }
+        }
+      }
+      
+      return false; // No collision
+    }
 
     // Movement function with client-side prediction
     function movePlayer(direction) {
@@ -461,25 +533,31 @@
           const newX = Math.max(11, Math.min(canvas.width - 21, currentPlayer.x + dx));
           const newY = Math.max(11, Math.min(canvas.height - 21, currentPlayer.y + dy));
           
-          // Only update if the position actually changed
-          if (newX !== currentPlayer.x || newY !== currentPlayer.y) {
-            players[selfId].x = newX;
-            players[selfId].y = newY;
-            
-            // Update facing direction immediately
-            if (dx > 0) players[selfId].facing = 'right';
-            else if (dx < 0) players[selfId].facing = 'left';
-            else if (dy > 0) players[selfId].facing = 'down';
-            else if (dy < 0) players[selfId].facing = 'up';
-            
-            // Send to server
-            ws.send(JSON.stringify({ 
-              type: "move", 
-              dx: dx, 
-              dy: dy,
-              canvasWidth: canvas.width,
-              canvasHeight: canvas.height
-            }));
+          // Check for collisions before updating position
+          if (!checkClientCollision(newX, newY, 10)) {
+            // Only update if the position actually changed
+            if (newX !== currentPlayer.x || newY !== currentPlayer.y) {
+              players[selfId].x = newX;
+              players[selfId].y = newY;
+              
+              // Update facing direction immediately
+              if (dx > 0) players[selfId].facing = 'right';
+              else if (dx < 0) players[selfId].facing = 'left';
+              else if (dy > 0) players[selfId].facing = 'down';
+              else if (dy < 0) players[selfId].facing = 'up';
+              
+              // Send to server
+              ws.send(JSON.stringify({ 
+                type: "move", 
+                dx: dx, 
+                dy: dy,
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height
+              }));
+            }
+          } else {
+            // Client detected collision - don't move and don't send to server
+            console.log(`Client collision detected at (${newX}, ${newY}), blocking movement ${direction}`);
           }
         }
       }
@@ -538,6 +616,38 @@
       swingSword();
     });
 
+    // Draw tiles based on map data
+    function drawTiles() {
+      const tileData = gameState.map.tileData;
+      if (!tileData || !tileData.tileMap) return;
+      
+      const tileSize = tileData.tileSize || 32;
+      const tileMap = tileData.tileMap;
+      const tileTypes = tileData.tileTypes || {};
+      
+      for (let y = 0; y < tileMap.length; y++) {
+        for (let x = 0; x < tileMap[y].length; x++) {
+          const tileType = tileMap[y][x];
+          const tileTypeData = tileTypes[tileType];
+          
+          if (!tileTypeData) continue;
+          
+          const drawX = x * tileSize;
+          const drawY = y * tileSize;
+          
+          // Try to draw sprite first
+          if (assets.loaded && assets.tiles && assets.tiles[tileType]) {
+            ctx.drawImage(assets.tiles[tileType], drawX, drawY, tileSize, tileSize);
+          } else {
+            // Fallback to color
+            const color = tileTypeData.color || '#4a7c59';
+            ctx.fillStyle = color;
+            ctx.fillRect(drawX, drawY, tileSize, tileSize);
+          }
+        }
+      }
+    }
+
     // Draw loop
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -548,6 +658,11 @@
         const pattern = ctx.createPattern(bg, 'repeat');
         ctx.fillStyle = pattern;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Draw tiles if map data is available
+      if (gameState.map && gameState.map.tileData) {
+        drawTiles();
       }
       
       // Draw players
