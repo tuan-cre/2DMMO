@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MiniMMO</title>
   <style>
     body {
@@ -9,11 +10,23 @@
       padding: 0;
       overflow: hidden;
       background: #000;
+      /* Prevent mobile zoom on double-tap */
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
     canvas {
       background: #fff;
       display: block;
       border: none;
+      /* Prevent mobile zoom and selection */
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
     
     /* Mobile D-pad styles - 3x5 Grid Layout */
