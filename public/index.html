@@ -528,8 +528,8 @@
       const map = gameState.map;
       const tileSize = map.tileSize || 32;
       
-      // Check bounds first (match server-side logic)
-      if (x < 0 || y < 0 || x >= map.width || y >= map.height) {
+      // Check bounds first (match server-side logic exactly)
+      if (x < radius || y < radius || x >= map.width - radius || y >= map.height - radius) {
         return true;
       }
       
@@ -584,16 +584,21 @@
           const currentPlayer = players[selfId];
           
           // Use map boundaries if available, otherwise use canvas boundaries
-          let maxX = canvas.width - 21;
-          let maxY = canvas.height - 21;
+          // Match server-side boundary logic exactly (player radius = 10)
+          let minX = 10;
+          let minY = 10;
+          let maxX = canvas.width - 10;
+          let maxY = canvas.height - 10;
           
           if (gameState.map && gameState.map.width && gameState.map.height) {
-            maxX = gameState.map.width - 21;
-            maxY = gameState.map.height - 21;
+            minX = 10;
+            minY = 10;
+            maxX = gameState.map.width - 10;
+            maxY = gameState.map.height - 10;
           }
           
-          const newX = Math.max(11, Math.min(maxX, currentPlayer.x + dx));
-          const newY = Math.max(11, Math.min(maxY, currentPlayer.y + dy));
+          const newX = Math.max(minX, Math.min(maxX, currentPlayer.x + dx));
+          const newY = Math.max(minY, Math.min(maxY, currentPlayer.y + dy));
           
           // Check for collisions before updating position
           if (!checkClientCollision(newX, newY, 10)) {
