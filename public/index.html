@@ -32,16 +32,16 @@
     /* Mobile D-pad styles - 3x5 Grid Layout */
     .dpad {
       position: fixed;
-      bottom: 200px;
+      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
-      width: 800px;
-      height: 480px;
+      width: 350px;
+      height: 210px;
       display: none;
       grid-template-columns: repeat(5, 1fr);
       grid-template-rows: repeat(3, 1fr);
-      gap: 20px;
-      padding: 20px;
+      gap: 8px;
+      padding: 8px;
     }
     
     .dpad-button {
@@ -49,7 +49,7 @@
       border: 4px solid rgba(255, 255, 255, 0.8);
       border-radius: 15px;
       color: white;
-      font-size: 72px;
+      font-size: 28px;
       font-weight: bold;
       display: flex;
       align-items: center;
@@ -121,15 +121,15 @@
     /* Additional adjustments for very small screens */
     @media (max-width: 480px) {
       .dpad {
-        bottom: 40px;
-        width: 700px;
-        height: 420px;
-        gap: 16px;
-        padding: 16px;
+        bottom: 10px;
+        width: 320px;
+        height: 190px;
+        gap: 6px;
+        padding: 6px;
       }
       
       .dpad-button {
-        font-size: 56px;
+        font-size: 24px;
       }
     }
     
