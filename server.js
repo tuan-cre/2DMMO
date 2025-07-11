@@ -131,11 +131,11 @@ function performBroadcast(data = {}) {
   lastBroadcastTime = Date.now();
   const now = Date.now();
   
-  // Clear expired sword swings (but be more lenient)
+  // Clear expired sword swings (be more lenient for network sync)
   for (let id in players) {
     const player = players[id];
-    if (player.isSwinging && player.swingEndTime && now > player.swingEndTime + 100) {
-      // Add 100ms buffer to ensure all clients receive the swing data
+    if (player.isSwinging && player.swingEndTime && now > player.swingEndTime + 500) {
+      // Add 500ms buffer to ensure all clients receive the swing data, especially on slower networks
       player.isSwinging = false;
       console.log(`Server cleared sword swing for player ${id}`);
     }
