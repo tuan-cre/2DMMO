@@ -210,6 +210,17 @@
       smoothing: 0.1 // Camera smoothing factor (0.1 = smooth, 1 = instant)
     };
     
+    // Debug flag for collision visualization
+    let showCollisionDebug = false; // Set to false to hide collision outlines
+    
+    // Toggle collision debug with 'C' key
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'c' || e.key === 'C') {
+        showCollisionDebug = !showCollisionDebug;
+        console.log('Collision debug visualization:', showCollisionDebug ? 'ON' : 'OFF');
+      }
+    });
+    
     // Client-side prediction and lag compensation
     let lastMoveTime = 0;
     const MOVE_THROTTLE = 50; // Faster movement response
@@ -229,22 +240,31 @@
       if (selfId && players[selfId]) {
         const player = players[selfId];
         
+        // Use logical dimensions instead of scaled canvas dimensions
+        const viewWidth = canvas.logicalWidth || canvas.width;
+        const viewHeight = canvas.logicalHeight || canvas.height;
+        
         // Set target position to center the player on screen
-        camera.targetX = player.x - canvas.width / 2;
-        camera.targetY = player.y - canvas.height / 2;
+        camera.targetX = player.x - viewWidth / 2;
+        camera.targetY = player.y - viewHeight / 2;
         
         // If map is available, clamp camera to map boundaries
-        if (gameState.map && gameState.map.width && gameState.map.height) {
+        if (gameState.map && gameState.map.tileMap) {
+          // Calculate actual map dimensions from tile grid instead of using potentially incorrect map.width/height
+          const tileSize = gameState.map.tileSize || 32;
+          const mapWidth = gameState.map.tileMap[0] ? gameState.map.tileMap[0].length * tileSize : 0;
+          const mapHeight = gameState.map.tileMap.length * tileSize;
+          
           // Prevent camera from showing beyond map edges
-          camera.targetX = Math.max(0, Math.min(gameState.map.width - canvas.width, camera.targetX));
-          camera.targetY = Math.max(0, Math.min(gameState.map.height - canvas.height, camera.targetY));
+          camera.targetX = Math.max(0, Math.min(mapWidth - viewWidth, camera.targetX));
+          camera.targetY = Math.max(0, Math.min(mapHeight - viewHeight, camera.targetY));
           
           // If map is smaller than screen, center it
-          if (gameState.map.width < canvas.width) {
-            camera.targetX = (gameState.map.width - canvas.width) / 2;
+          if (mapWidth < viewWidth) {
+            camera.targetX = (mapWidth - viewWidth) / 2;
           }
-          if (gameState.map.height < canvas.height) {
-            camera.targetY = (gameState.map.height - canvas.height) / 2;
+          if (mapHeight < viewHeight) {
+            camera.targetY = (mapHeight - viewHeight) / 2;
           }
         }
         
@@ -409,9 +429,30 @@
     
     // Set canvas size to full screen
     function resizeCanvas() {
-      // Always use full viewport size for proper camera movement
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // Get the device pixel ratio, but cap it to prevent extreme scaling
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      
+      // Get the actual viewport size
+      const rect = canvas.getBoundingClientRect();
+      const displayWidth = window.innerWidth;
+      const displayHeight = window.innerHeight;
+      
+      // Set the canvas display size (CSS pixels)
+      canvas.style.width = displayWidth + 'px';
+      canvas.style.height = displayHeight + 'px';
+      
+      // Set the actual canvas size in memory (scaled for device pixel ratio)
+      canvas.width = displayWidth * dpr;
+      canvas.height = displayHeight * dpr;
+      
+      // Scale the drawing context so everything draws at the correct size
+      ctx.scale(dpr, dpr);
+      
+      // For game logic, always use the CSS pixel dimensions
+      canvas.logicalWidth = displayWidth;
+      canvas.logicalHeight = displayHeight;
+      
+      console.log(`Canvas resized: display=${displayWidth}x${displayHeight}, actual=${canvas.width}x${canvas.height}, dpr=${dpr}`);
     }
     
     // Initial resize and listen for window resize
@@ -544,7 +585,17 @@
       }
       if (data.map) {
         gameState.map = data.map;
-        console.log('Map data received:', data.map);
+        
+        // Calculate and log actual map dimensions from tile grid
+        if (data.map.tileMap && data.map.tileMap.length > 0) {
+          const tileSize = data.map.tileSize || 32;
+          const calculatedWidth = data.map.tileMap[0] ? data.map.tileMap[0].length * tileSize : 0;
+          const calculatedHeight = data.map.tileMap.length * tileSize;
+          console.log(`Map received: ${data.map.tileMap[0] ? data.map.tileMap[0].length : 0} x ${data.map.tileMap.length} tiles`);
+          console.log(`Calculated map dimensions: ${calculatedWidth} x ${calculatedHeight} pixels`);
+          console.log('Map data boundaries:', data.map.boundaries);
+        }
+        
         resizeCanvas(); // Ensure canvas is properly sized for camera movement
       }
       if (data.id && !selfId) {
@@ -591,9 +642,71 @@
       
       return false; // No collision
     }
+    
+    // Collision visualization functions
+    function drawPlayerCollisionOutline(x, y, radius = 10) {
+      if (!showCollisionDebug) return;
+      
+      const screenX = x - camera.x;
+      const screenY = y - camera.y;
+      
+      // Draw player collision circle (radius 10)
+      ctx.strokeStyle = '#00FF00'; // Green for player collision
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // Dashed line
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset line dash
+    }
+    
+    function drawTileCollisionOutlines() {
+      if (!showCollisionDebug || !gameState.map || !gameState.map.tileMap || !gameState.map.tileTypes) return;
+      
+      const tileSize = gameState.map.tileSize || 32;
+      const tileMap = gameState.map.tileMap;
+      const tileTypes = gameState.map.tileTypes;
+      
+      // Use logical dimensions for viewport calculations
+      const viewWidth = canvas.logicalWidth || canvas.width;
+      const viewHeight = canvas.logicalHeight || canvas.height;
+      
+      // Calculate which tiles are visible on screen
+      const padding = 1;
+      const startTileX = Math.max(0, Math.floor((camera.x - padding * tileSize) / tileSize));
+      const endTileX = Math.min(tileMap[0] ? tileMap[0].length - 1 : 0, Math.ceil((camera.x + viewWidth + padding * tileSize) / tileSize));
+      const startTileY = Math.max(0, Math.floor((camera.y - padding * tileSize) / tileSize));
+      const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + viewHeight + padding * tileSize) / tileSize));
+      
+      // Draw collision outlines for non-walkable tiles
+      ctx.strokeStyle = '#FF0000'; // Red for collision tiles
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]); // Dashed line
+      
+      for (let y = startTileY; y <= endTileY; y++) {
+        for (let x = startTileX; x <= endTileX; x++) {
+          if (y >= 0 && y < tileMap.length && x >= 0 && x < tileMap[y].length) {
+            const tileType = tileMap[y][x];
+            const tileTypeData = tileTypes[tileType];
+            
+            // Only draw outline for collision tiles (like rocks)
+            if (tileTypeData && (!tileTypeData.walkable || tileTypeData.collision)) {
+              const drawX = x * tileSize - camera.x;
+              const drawY = y * tileSize - camera.y;
+              
+              // Draw collision box outline
+              ctx.strokeRect(drawX, drawY, tileSize, tileSize);
+            }
+          }
+        }
+      }
+      
+      ctx.setLineDash([]); // Reset line dash
+    }
 
+    // ...existing code...
     // Movement function with client-side prediction
-    function movePlayer(direction) {
+    function movePlayer(direction = null) {
       const now = Date.now();
       
       // Throttle movement commands to reduce server load
@@ -603,7 +716,7 @@
       lastMoveTime = now;
       
       const moveMap = {
-        up: [0, -12],    // Increased movement speed for better responsiveness
+        up: [0, -12],    
         down: [0, 12],
         left: [-12, 0],
         right: [12, 0]
@@ -624,11 +737,16 @@
           let maxX = canvas.width - 10;
           let maxY = canvas.height - 10;
           
-          if (gameState.map && gameState.map.width && gameState.map.height) {
+          if (gameState.map && gameState.map.tileMap) {
+            // Calculate actual map dimensions from tile grid
+            const tileSize = gameState.map.tileSize || 32;
+            const mapWidth = gameState.map.tileMap[0] ? gameState.map.tileMap[0].length * tileSize : canvas.width;
+            const mapHeight = gameState.map.tileMap.length * tileSize;
+            
             minX = 10;
             minY = 10;
-            maxX = gameState.map.width - 10;
-            maxY = gameState.map.height - 10;
+            maxX = mapWidth - 10;
+            maxY = mapHeight - 10;
           }
           
           const newX = Math.max(minX, Math.min(maxX, currentPlayer.x + dx));
@@ -775,12 +893,16 @@
       const tileMap = gameState.map.tileMap;
       const tileTypes = gameState.map.tileTypes;
       
+      // Use logical dimensions for viewport calculations
+      const viewWidth = canvas.logicalWidth || canvas.width;
+      const viewHeight = canvas.logicalHeight || canvas.height;
+      
       // Calculate which tiles are visible on screen with some padding to avoid gaps
       const padding = 2; // Extra tiles to render beyond screen edges
       const startTileX = Math.max(0, Math.floor((camera.x - padding * tileSize) / tileSize));
-      const endTileX = Math.min(tileMap[0] ? tileMap[0].length - 1 : 0, Math.ceil((camera.x + canvas.width + padding * tileSize) / tileSize));
+      const endTileX = Math.min(tileMap[0] ? tileMap[0].length - 1 : 0, Math.ceil((camera.x + viewWidth + padding * tileSize) / tileSize));
       const startTileY = Math.max(0, Math.floor((camera.y - padding * tileSize) / tileSize));
-      const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + canvas.height + padding * tileSize) / tileSize));
+      const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + viewHeight + padding * tileSize) / tileSize));
       
       let rocksRendered = 0;
       let grassRendered = 0;
@@ -828,7 +950,11 @@
 
     // Draw loop
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Use logical dimensions for clearing and background drawing
+      const viewWidth = canvas.logicalWidth || canvas.width;
+      const viewHeight = canvas.logicalHeight || canvas.height;
+      
+      ctx.clearRect(0, 0, viewWidth, viewHeight);
       
       // Update camera to follow player
       updateCamera();
@@ -841,21 +967,70 @@
         const bgOffsetX = -camera.x % bg.width;
         const bgOffsetY = -camera.y % bg.height;
         
-        // Draw tiled background to fill screen
-        for (let y = bgOffsetY; y < canvas.height; y += bg.height) {
-          for (let x = bgOffsetX; x < canvas.width; x += bg.width) {
-            ctx.drawImage(bg, x, y);
+        // Only draw background within map boundaries if map data is available
+        let drawWidth = viewWidth;
+        let drawHeight = viewHeight;
+        let drawStartX = bgOffsetX;
+        let drawStartY = bgOffsetY;
+        
+        if (gameState.map && gameState.map.tileMap) {
+          // Calculate actual map dimensions from tile grid
+          const tileSize = gameState.map.tileSize || 32;
+          const mapWidth = gameState.map.tileMap[0] ? gameState.map.tileMap[0].length * tileSize : 0;
+          const mapHeight = gameState.map.tileMap.length * tileSize;
+          
+          // Limit background drawing to within map boundaries
+          const mapLeft = -camera.x;
+          const mapTop = -camera.y;
+          const mapRight = mapWidth - camera.x;
+          const mapBottom = mapHeight - camera.y;
+          
+          // Draw tiled background only within map bounds
+          for (let y = Math.max(bgOffsetY, mapTop); y < Math.min(viewHeight, mapBottom); y += bg.height) {
+            for (let x = Math.max(bgOffsetX, mapLeft); x < Math.min(viewWidth, mapRight); x += bg.width) {
+              // Only draw if within map area
+              if (x + bg.width > mapLeft && x < mapRight && y + bg.height > mapTop && y < mapBottom) {
+                ctx.drawImage(bg, x, y);
+              }
+            }
+          }
+        } else {
+          // Fallback: draw tiled background to fill screen when no map data
+          for (let y = bgOffsetY; y < viewHeight; y += bg.height) {
+            for (let x = bgOffsetX; x < viewWidth; x += bg.width) {
+              ctx.drawImage(bg, x, y);
+            }
           }
         }
       } else {
         // Fallback solid background if no background image
-        ctx.fillStyle = '#90EE90'; // Light green fallback
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Only draw within map boundaries if available
+        if (gameState.map && gameState.map.tileMap) {
+          const tileSize = gameState.map.tileSize || 32;
+          const mapWidth = gameState.map.tileMap[0] ? gameState.map.tileMap[0].length * tileSize : viewWidth;
+          const mapHeight = gameState.map.tileMap.length * tileSize;
+          
+          // Calculate map area on screen
+          const mapLeft = Math.max(0, -camera.x);
+          const mapTop = Math.max(0, -camera.y);
+          const mapRight = Math.min(viewWidth, mapWidth - camera.x);
+          const mapBottom = Math.min(viewHeight, mapHeight - camera.y);
+          
+          if (mapRight > mapLeft && mapBottom > mapTop) {
+            ctx.fillStyle = '#90EE90'; // Light green fallback
+            ctx.fillRect(mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop);
+          }
+        } else {
+          ctx.fillStyle = '#90EE90'; // Light green fallback
+          ctx.fillRect(0, 0, viewWidth, viewHeight);
+        }
       }
       
       // Draw tiles if map data is available
       if (gameState.map && gameState.map.tileMap) {
         drawTiles();
+        // Draw tile collision outlines after tiles
+        drawTileCollisionOutlines();
       }
       
       // Draw players
@@ -867,8 +1042,8 @@
         const screenY = p.y - camera.y;
         
         // Only draw if player is visible on screen (with some margin)
-        if (screenX > -50 && screenX < canvas.width + 50 && 
-            screenY > -50 && screenY < canvas.height + 50) {
+        if (screenX > -50 && screenX < viewWidth + 50 && 
+            screenY > -50 && screenY < viewHeight + 50) {
           
           // Update swing state based on server data for all players
           if (p.isSwinging) {
@@ -915,7 +1090,7 @@
             const sprite = assets.sprites[spriteName];
             if (sprite) {
               // Draw sprite (32x32) centered on player position, adjusted for camera
-              ctx.drawImage(sprite, screenX - 11, screenY - 11, 32, 32);
+              ctx.drawImage(sprite, screenX - 16, screenY - 16, 32, 32);
             }
             
             // Draw sword swing effect if player is swinging
@@ -925,18 +1100,21 @@
           } else {
             // Fallback to rectangles while assets are loading
             ctx.fillStyle = id === selfId ? 'lime' : 'cyan';
-            ctx.fillRect(screenX, screenY, 10, 10);
+            ctx.fillRect(screenX - 5, screenY - 5, 10, 10);
           }
+          
+          // Draw player collision outline (10-pixel radius circle)
+          drawPlayerCollisionOutline(p.x, p.y, 10);
           
           // Draw player name above the character (adjusted for camera)
           ctx.fillStyle = 'black';
           ctx.font = '12px Arial';
           ctx.textAlign = 'center';
-          ctx.fillText(p.name || 'Player', screenX + 5, screenY - 25);
+          ctx.fillText(p.name || 'Player', screenX, screenY - 30);
           
           // Draw player health bar (adjusted for camera)
           if (p.health !== undefined) {
-            drawHealthBar(screenX + 5, screenY - 15, p.health, p.maxHealth, 'lime');
+            drawHealthBar(screenX, screenY - 20, p.health, p.maxHealth, 'lime');
           }
         }
       }
@@ -947,6 +1125,10 @@
         const drawX = screenX !== null ? screenX : player.x - camera.x;
         const drawY = screenY !== null ? screenY : player.y - camera.y;
         
+        // Server-side sword collision parameters (match GameServer.js)
+        const swordRange = 20; // SWORD_RANGE from server
+        const swordWidth = swordRange / 2; // Arc width (10 pixels each side)
+        
         // Get the appropriate sword sprite based on facing direction
         let swordSprite;
         let swordX = drawX;
@@ -955,23 +1137,23 @@
         switch(player.facing) {
           case 'up':
             swordSprite = assets.loaded ? assets.sprites.sword_up : null;
-            swordX = drawX - 11; // Center horizontally
-            swordY = drawY - 32; // Position above player
+            swordX = drawX - 16; // Center horizontally
+            swordY = drawY - swordRange - 16; // Position at sword tip (20 pixels up)
             break;
           case 'down':
             swordSprite = assets.loaded ? assets.sprites.sword_down : null;
-            swordX = drawX - 11; // Center horizontally
-            swordY = drawY + 11; // Position below player
+            swordX = drawX - 16; // Center horizontally
+            swordY = drawY + swordRange - 16; // Position at sword tip (20 pixels down)
             break;
           case 'left':
             swordSprite = assets.loaded ? assets.sprites.sword_left : null;
-            swordX = drawX - 32; // Position to the left
-            swordY = drawY - 11; // Center vertically
+            swordX = drawX - swordRange - 16; // Position at sword tip (20 pixels left)
+            swordY = drawY - 16; // Center vertically
             break;
           case 'right':
             swordSprite = assets.loaded ? assets.sprites.sword_right : null;
-            swordX = drawX + 11; // Position to the right
-            swordY = drawY - 11; // Center vertically
+            swordX = drawX + swordRange - 16; // Position at sword tip (20 pixels right)
+            swordY = drawY - 16; // Center vertically
             break;
         }
         
@@ -979,52 +1161,84 @@
         if (swordSprite) {
           ctx.drawImage(swordSprite, swordX, swordY, 32, 32);
         } else {
-          // Fallback to the old line drawing if sprite not available
+          // Fallback: Draw sword collision area outline (matching server logic)
           ctx.strokeStyle = '#FFD700'; // Gold color for sword
           ctx.lineWidth = 3;
-          ctx.lineCap = 'round';
+          ctx.setLineDash([4, 4]); // Dashed line to show it's the collision area
           
-          const swordLength = 15;
-          let startX = drawX + 5; // Center of player
-          let startY = drawY + 5;
-          let endX = startX;
-          let endY = startY;
+          // Calculate sword tip position (matching server logic)
+          let swordTipX = drawX;
+          let swordTipY = drawY;
           
-          // Calculate sword position based on facing direction
           switch(player.facing) {
-            case 'up':
-              startY = drawY - 5;
-              endX = startX;
-              endY = startY - swordLength;
+            case 'up': 
+              swordTipY -= swordRange;
+              // Draw vertical sword collision area
+              ctx.strokeRect(drawX - swordWidth, drawY - swordRange, swordWidth * 2, swordRange);
               break;
             case 'down':
-              startY = drawY + 15;
-              endX = startX;
-              endY = startY + swordLength;
+              swordTipY += swordRange;
+              // Draw vertical sword collision area
+              ctx.strokeRect(drawX - swordWidth, drawY, swordWidth * 2, swordRange);
               break;
             case 'left':
-              startX = drawX - 5;
-              endX = startX - swordLength;
-              endY = startY;
+              swordTipX -= swordRange;
+              // Draw horizontal sword collision area
+              ctx.strokeRect(drawX - swordRange, drawY - swordWidth, swordRange, swordWidth * 2);
               break;
             case 'right':
-              startX = drawX + 15;
-              endX = startX + swordLength;
-              endY = startY;
+              swordTipX += swordRange;
+              // Draw horizontal sword collision area
+              ctx.strokeRect(drawX, drawY - swordWidth, swordRange, swordWidth * 2);
               break;
           }
           
-          // Draw sword line
+          // Draw sword tip circle (where collision is centered)
+          ctx.fillStyle = '#FF0000'; // Red tip to show collision center
           ctx.beginPath();
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
+          ctx.arc(swordTipX, swordTipY, 3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.setLineDash([]); // Reset line dash
+        }
+        
+        // Always draw collision area outline when debug is enabled
+        if (showCollisionDebug) {
+          ctx.strokeStyle = '#FF8800'; // Orange for sword collision area
+          ctx.lineWidth = 2;
+          ctx.setLineDash([2, 2]);
+          
+          // Calculate sword tip position (matching server logic)
+          let swordTipX = drawX;
+          let swordTipY = drawY;
+          
+          switch(player.facing) {
+            case 'up': 
+              swordTipY -= swordRange;
+              // Draw the actual collision rectangle
+              ctx.strokeRect(drawX - swordWidth, drawY - swordRange, swordWidth * 2, swordRange);
+              break;
+            case 'down':
+              swordTipY += swordRange;
+              ctx.strokeRect(drawX - swordWidth, drawY, swordWidth * 2, swordRange);
+              break;
+            case 'left':
+              swordTipX -= swordRange;
+              ctx.strokeRect(drawX - swordRange, drawY - swordWidth, swordRange, swordWidth * 2);
+              break;
+            case 'right':
+              swordTipX += swordRange;
+              ctx.strokeRect(drawX, drawY - swordWidth, swordRange, swordWidth * 2);
+              break;
+          }
+          
+          // Draw sword tip collision circle
+          ctx.strokeStyle = '#FF0000';
+          ctx.beginPath();
+          ctx.arc(swordTipX, swordTipY, swordRange, 0, Math.PI * 2);
           ctx.stroke();
           
-          // Draw sword tip (small circle)
-          ctx.fillStyle = '#C0C0C0'; // Silver tip
-          ctx.beginPath();
-          ctx.arc(endX, endY, 2, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.setLineDash([]);
         }
       }
       
@@ -1042,22 +1256,25 @@
           
           if (assets.loaded && assets.sprites.enemy) {
             // Draw enemy sprite (adjusted for camera)
-            ctx.drawImage(assets.sprites.enemy, screenX - 11, screenY - 11, 32, 32);
+            ctx.drawImage(assets.sprites.enemy, screenX - 16, screenY - 16, 32, 32);
           } else {
             // Fallback to red rectangle while assets are loading
             ctx.fillStyle = 'red';
-            ctx.fillRect(screenX, screenY, 10, 10);
+            ctx.fillRect(screenX - 5, screenY - 5, 10, 10);
           }
+          
+          // Draw enemy collision outline (10-pixel radius circle)
+          drawPlayerCollisionOutline(enemy.x, enemy.y, 10);
           
           // Draw enemy name above the character (adjusted for camera)
           ctx.fillStyle = 'red';
           ctx.font = '12px Arial';
           ctx.textAlign = 'center';
-          ctx.fillText(enemy.name || 'Enemy', screenX + 5, screenY - 25);
+          ctx.fillText(enemy.name || 'Enemy', screenX, screenY - 30);
           
           // Draw enemy health bar (adjusted for camera)
           if (enemy.health !== undefined) {
-            drawHealthBar(screenX + 5, screenY - 15, enemy.health, enemy.maxHealth, 'red');
+            drawHealthBar(screenX, screenY - 20, enemy.health, enemy.maxHealth, 'red');
           }
         }
       }
@@ -1082,6 +1299,45 @@
         ctx.fillStyle = color;
         ctx.fillRect(x, y, healthWidth, barHeight);
       }
+      
+      // Collision debug drawing
+      if (showCollisionDebug && gameState.map && gameState.map.tileMap) {
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; // Red color for collision outlines
+        ctx.lineWidth = 2;
+        
+        // Draw collision outlines for all tiles
+        for (let y = 0; y < gameState.map.tileMap.length; y++) {
+          for (let x = 0; x < gameState.map.tileMap[y].length; x++) {
+            const tileType = gameState.map.tileMap[y][x];
+            const tileData = gameState.map.tileTypes[tileType];
+            
+            if (tileData && (!tileData.walkable || tileData.collision)) {
+              // Tile is not walkable or has collision, draw outline
+              const drawX = x * gameState.map.tileSize - camera.x;
+              const drawY = y * gameState.map.tileSize - camera.y;
+              ctx.strokeRect(drawX, drawY, gameState.map.tileSize, gameState.map.tileSize);
+            }
+          }
+        }
+      }
+      
+      // Display collision debug info
+      if (showCollisionDebug) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(10, 10, 240, 80);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '12px Arial';
+        ctx.fillText('Collision Debug (Press C to toggle)', 15, 25);
+        ctx.fillStyle = '#00FF00';
+        ctx.fillText('Green circles: Player/Enemy hitbox (R:10)', 15, 40);
+        ctx.fillStyle = '#FF0000';
+        ctx.fillText('Red squares: Rock collision tiles', 15, 55);
+        ctx.fillStyle = '#FF8800';
+        ctx.fillText('Orange rectangles: Sword collision area (20x10)', 15, 70);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillText('Red circles: Sword tip range (R:20)', 15, 85);
+      }
+      
       requestAnimationFrame(draw);
     }
 
