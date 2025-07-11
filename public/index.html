@@ -582,8 +582,18 @@
         // Client-side prediction: update our own position immediately
         if (selfId && players[selfId]) {
           const currentPlayer = players[selfId];
-          const newX = Math.max(11, Math.min(canvas.width - 21, currentPlayer.x + dx));
-          const newY = Math.max(11, Math.min(canvas.height - 21, currentPlayer.y + dy));
+          
+          // Use map boundaries if available, otherwise use canvas boundaries
+          let maxX = canvas.width - 21;
+          let maxY = canvas.height - 21;
+          
+          if (gameState.map && gameState.map.width && gameState.map.height) {
+            maxX = gameState.map.width - 21;
+            maxY = gameState.map.height - 21;
+          }
+          
+          const newX = Math.max(11, Math.min(maxX, currentPlayer.x + dx));
+          const newY = Math.max(11, Math.min(maxY, currentPlayer.y + dy));
           
           // Check for collisions before updating position
           if (!checkClientCollision(newX, newY, 10)) {
