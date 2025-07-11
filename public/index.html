@@ -361,13 +361,22 @@
     
     // Set canvas size to full screen
     function resizeCanvas() {
-      // Use map dimensions if available, otherwise use window size
-      if (gameState.map && gameState.map.width && gameState.map.height) {
-        canvas.width = gameState.map.width;
-        canvas.height = gameState.map.height;
-      } else {
+      // For mobile devices, always use full viewport size for better visibility
+      const isMobile = window.innerWidth <= 768 || ('ontouchstart' in window);
+      
+      if (isMobile) {
+        // On mobile, use full screen dimensions for better game view
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+      } else {
+        // On desktop, use map dimensions if available, otherwise use window size
+        if (gameState.map && gameState.map.width && gameState.map.height) {
+          canvas.width = gameState.map.width;
+          canvas.height = gameState.map.height;
+        } else {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+        }
       }
     }
     
