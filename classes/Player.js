@@ -14,14 +14,15 @@ class Player {
     this.lastMoveTime = 0;
   }
 
-  move(dx, dy, canvasWidth, canvasHeight) {
+  move(dx, dy, mapWidth, mapHeight) {
     const oldX = this.x;
     const oldY = this.y;
     const oldFacing = this.facing;
     
-    // Keep players within canvas bounds
-    this.x = Math.max(11, Math.min(canvasWidth - 21, this.x + dx));
-    this.y = Math.max(11, Math.min(canvasHeight - 21, this.y + dy));
+    // Keep players within map bounds using consistent 10-pixel radius
+    const playerRadius = 10;
+    this.x = Math.max(playerRadius, Math.min(mapWidth - playerRadius, this.x + dx));
+    this.y = Math.max(playerRadius, Math.min(mapHeight - playerRadius, this.y + dy));
     
     // Update facing direction based on movement
     if (dx > 0) this.facing = 'right';

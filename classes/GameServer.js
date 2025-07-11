@@ -267,15 +267,18 @@ class GameServer {
     if (!player) return;
     
     const currentMap = this.mapManager.getCurrentMap();
-    const canvasWidth = data.canvasWidth || currentMap.width;
-    const canvasHeight = data.canvasHeight || currentMap.height;
     
-    // Calculate new position
-    const newX = Math.max(11, Math.min(canvasWidth - 21, player.x + data.dx));
-    const newY = Math.max(11, Math.min(canvasHeight - 21, player.y + data.dy));
+    // Always use actual map dimensions for server-side boundaries, not client canvas size
+    // This ensures mobile players with smaller screens can still access the full map
+    const mapWidth = currentMap.width;
+    const mapHeight = currentMap.height;
+    
+    // Calculate new position using actual map boundaries (10-pixel radius for consistency)
+    const playerRadius = 10;
+    const newX = Math.max(playerRadius, Math.min(mapWidth - playerRadius, player.x + data.dx));
+    const newY = Math.max(playerRadius, Math.min(mapHeight - playerRadius, player.y + data.dy));
     
     // Check for collisions at the new position
-    const playerRadius = 10; // Player collision radius
     if (currentMap.checkCollision(newX, newY, playerRadius)) {
       // Collision detected, send position correction to client (fallback for client-side prediction failures)
       const client = this.getClientByPlayerId(playerId);
@@ -295,8 +298,8 @@ class GameServer {
       return;
     }
     
-    // No collision, allow movement
-    const positionChanged = player.move(data.dx, data.dy, canvasWidth, canvasHeight);
+    // No collision, allow movement using actual map dimensions
+    const positionChanged = player.move(data.dx, data.dy, mapWidth, mapHeight);
     
     if (positionChanged) {
       this.broadcast();
