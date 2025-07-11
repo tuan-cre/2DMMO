@@ -50,8 +50,8 @@ class Map {
         walkable: true, 
         color: '#4a7c59' 
       },
-      stone: { 
-        sprite: 'assets/tiles/stone.png', 
+      rocks: { 
+        sprite: 'assets/tiles/rocks.png', 
         walkable: false, 
         color: '#666666' 
       },
@@ -261,7 +261,7 @@ class Map {
         const noise = Math.sin(x * 0.1) * Math.cos(y * 0.1) + Math.random() * 0.3;
         
         if (noise > 0.4) {
-          tileType = 'stone';
+          tileType = 'rocks';
         } else if (noise < -0.3) {
           tileType = 'dirt';
         } else if (distanceFromCenter > this.tilesX * 0.4 && Math.random() > 0.7) {
@@ -369,7 +369,14 @@ class Map {
       boundaries: this.boundaries,
       specialZones: this.specialZones,
       
-      // Tile and resource data
+      // Tile data directly on the map object (client expects this format)
+      tileSize: this.tileSize,
+      tilesX: this.tilesX,
+      tilesY: this.tilesY,
+      tileMap: this.tileMap,
+      tileTypes: this.tileTypes,
+      
+      // Also include for backwards compatibility
       tileData: this.getTileRenderData(),
       resourceMap: this.resourceMap,
       loadingStrategy: this.getResourceLoadingStrategy()

@@ -233,11 +233,23 @@
           // Prevent camera from showing beyond map edges
           camera.targetX = Math.max(0, Math.min(gameState.map.width - canvas.width, camera.targetX));
           camera.targetY = Math.max(0, Math.min(gameState.map.height - canvas.height, camera.targetY));
+          
+          // If map is smaller than screen, center it
+          if (gameState.map.width < canvas.width) {
+            camera.targetX = (gameState.map.width - canvas.width) / 2;
+          }
+          if (gameState.map.height < canvas.height) {
+            camera.targetY = (gameState.map.height - canvas.height) / 2;
+          }
         }
         
         // Smooth camera movement
         camera.x += (camera.targetX - camera.x) * camera.smoothing;
         camera.y += (camera.targetY - camera.y) * camera.smoothing;
+        
+        // Round camera position to prevent sub-pixel rendering issues
+        camera.x = Math.round(camera.x);
+        camera.y = Math.round(camera.y);
       }
     }
     
@@ -764,6 +776,7 @@
     function drawTiles() {
       // Get tile data directly from map, not from tileData property
       if (!gameState.map || !gameState.map.tileMap || !gameState.map.tileTypes) {
+        console.log('No map data available for tile rendering');
         return;
       }
       
@@ -771,13 +784,17 @@
       const tileMap = gameState.map.tileMap;
       const tileTypes = gameState.map.tileTypes;
       
-      // Calculate which tiles are visible on screen with proper bounds checking
-      const startTileX = Math.max(0, Math.floor(camera.x / tileSize));
-      const endTileX = Math.min(tileMap[0] ? tileMap[0].length - 1 : 0, Math.ceil((camera.x + canvas.width) / tileSize));
-      const startTileY = Math.max(0, Math.floor(camera.y / tileSize));
-      const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + canvas.height) / tileSize));
+      // Calculate which tiles are visible on screen with some padding to avoid gaps
+      const padding = 2; // Extra tiles to render beyond screen edges
+      const startTileX = Math.max(0, Math.floor((camera.x - padding * tileSize) / tileSize));
+      const endTileX = Math.min(tileMap[0] ? tileMap[0].length - 1 : 0, Math.ceil((camera.x + canvas.width + padding * tileSize) / tileSize));
+      const startTileY = Math.max(0, Math.floor((camera.y - padding * tileSize) / tileSize));
+      const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + canvas.height + padding * tileSize) / tileSize));
       
-      // Only draw visible tiles for better performance
+      let rocksRendered = 0;
+      let grassRendered = 0;
+      
+      // Draw all visible tiles
       for (let y = startTileY; y <= endTileY; y++) {
         for (let x = startTileX; x <= endTileX; x++) {
           // Ensure we have a valid tile coordinate
@@ -785,10 +802,17 @@
             const tileType = tileMap[y][x];
             const tileTypeData = tileTypes[tileType];
             
-            if (!tileTypeData) continue;
+            if (!tileTypeData) {
+              console.log(`Unknown tile type: ${tileType} at (${x}, ${y})`);
+              continue;
+            }
             
             const drawX = x * tileSize - camera.x;
             const drawY = y * tileSize - camera.y;
+            
+            // Count tiles for debugging
+            if (tileType === 'rocks') rocksRendered++;
+            if (tileType === 'grass') grassRendered++;
             
             // Try to draw sprite first
             if (assets.loaded && assets.tiles && assets.tiles[tileType]) {
@@ -802,6 +826,13 @@
           }
         }
       }
+      
+      // Debug logging (only log occasionally to avoid spam)
+      if (Math.random() < 0.01) {
+        console.log(`Rendered ${grassRendered} grass tiles, ${rocksRendered} rock tiles`);
+        console.log('Available assets:', Object.keys(assets.tiles || {}));
+        console.log('Available tile types:', Object.keys(tileTypes));
+      }
     }
 
     // Draw loop
@@ -814,14 +845,21 @@
       // Draw background if available
       if (assets.loaded && assets.backgrounds.grass) {
         const bg = assets.backgrounds.grass;
-        const pattern = ctx.createPattern(bg, 'repeat');
-        ctx.fillStyle = pattern;
         
-        // Offset background pattern with camera
-        ctx.save();
-        ctx.translate(-camera.x % bg.width, -camera.y % bg.height);
-        ctx.fillRect(camera.x, camera.y, canvas.width + bg.width, canvas.height + bg.height);
-        ctx.restore();
+        // Calculate background pattern offset
+        const bgOffsetX = -camera.x % bg.width;
+        const bgOffsetY = -camera.y % bg.height;
+        
+        // Draw tiled background to fill screen
+        for (let y = bgOffsetY; y < canvas.height; y += bg.height) {
+          for (let x = bgOffsetX; x < canvas.width; x += bg.width) {
+            ctx.drawImage(bg, x, y);
+          }
+        }
+      } else {
+        // Fallback solid background if no background image
+        ctx.fillStyle = '#90EE90'; // Light green fallback
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       
       // Draw tiles if map data is available
