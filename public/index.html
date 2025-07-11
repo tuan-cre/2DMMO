@@ -19,42 +19,85 @@
     /* Mobile D-pad styles */
     .dpad {
       position: fixed;
-      bottom: 20px;
-      left: 20px;
-      width: 120px;
-      height: 120px;
+      bottom: 30px;
+      left: 30px;
+      width: 180px;
+      height: 180px;
       display: none;
     }
     
     .dpad-button {
       position: absolute;
-      width: 40px;
-      height: 40px;
-      background: rgba(0, 0, 0, 0.5);
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      width: 60px;
+      height: 60px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 3px solid rgba(255, 255, 255, 0.6);
+      border-radius: 8px;
       color: white;
-      font-size: 16px;
+      font-size: 24px;
       font-weight: bold;
       display: flex;
       align-items: center;
       justify-content: center;
       user-select: none;
       touch-action: manipulation;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     
     .dpad-button:active {
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.9);
+      transform: scale(0.95);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
     }
     
-    .dpad-up { top: 0; left: 40px; }
-    .dpad-down { bottom: 0; left: 40px; }
-    .dpad-left { top: 40px; left: 0; }
-    .dpad-right { top: 40px; right: 0; }
+    .dpad-up { top: 0; left: 60px; }
+    .dpad-down { bottom: 0; left: 60px; }
+    .dpad-left { top: 60px; left: 0; }
+    .dpad-right { top: 60px; right: 0; }
     
     /* Show D-pad on mobile devices */
     @media (max-width: 768px), (pointer: coarse) {
       .dpad {
         display: block;
+      }
+      
+      /* Adjust scoreboard for mobile */
+      .scoreboard {
+        top: 10px;
+        right: 10px;
+        padding: 10px;
+        font-size: 12px;
+        min-width: 120px;
+        max-height: 200px;
+      }
+    }
+    
+    /* Additional adjustments for very small screens */
+    @media (max-width: 480px) {
+      .dpad {
+        bottom: 20px;
+        left: 20px;
+        width: 160px;
+        height: 160px;
+      }
+      
+      .dpad-button {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+      }
+      
+      .dpad-up { left: 55px; }
+      .dpad-down { left: 55px; }
+      .dpad-left { top: 55px; }
+      .dpad-right { top: 55px; }
+      
+      .sword-button {
+        width: 70px;
+        height: 70px;
+        font-size: 28px;
+        bottom: 20px;
+        right: 20px;
       }
     }
     
@@ -72,6 +115,8 @@
       font-size: 14px;
       min-width: 150px;
       z-index: 1000;
+      max-height: 300px;
+      overflow-y: auto;
     }
     
     .scoreboard h3 {
@@ -96,26 +141,28 @@
     /* Mobile sword button */
     .sword-button {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 60px;
-      height: 60px;
-      background: rgba(255, 215, 0, 0.8);
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      bottom: 30px;
+      right: 30px;
+      width: 80px;
+      height: 80px;
+      background: rgba(255, 215, 0, 0.9);
+      border: 3px solid rgba(255, 255, 255, 0.6);
       border-radius: 50%;
       color: #8B4513;
-      font-size: 24px;
+      font-size: 32px;
       display: none;
       align-items: center;
       justify-content: center;
       user-select: none;
       touch-action: manipulation;
       cursor: pointer;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     
     .sword-button:active {
       background: rgba(255, 215, 0, 1);
       transform: scale(0.95);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
     }
     
     /* Show sword button on mobile devices */
