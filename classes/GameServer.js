@@ -309,13 +309,18 @@ class GameServer {
     
     player.swingSword();
     
-    // Broadcast immediately
+    // Broadcast immediately to show sword swing
     this.broadcast({}, true);
     
-    // Broadcast again after delay to ensure delivery
+    // Schedule sword clearing after the swing duration
     setTimeout(() => {
-      this.broadcast({}, true);
-    }, 50);
+      if (player.isSwinging) {
+        player.clearSwing();
+        console.log(`Server cleared sword swing for player ${playerId}`);
+        // Broadcast the clear state
+        this.broadcast({}, true);
+      }
+    }, 300); // Match the swing duration from Player.js
     
     // Check for sword collisions
     const swordCollisions = this.checkSwordCollisions(player);
