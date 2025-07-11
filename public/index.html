@@ -16,26 +16,27 @@
       border: none;
     }
     
-    /* Mobile D-pad styles */
+    /* Mobile D-pad styles - 3x5 Grid Layout */
     .dpad {
       position: fixed;
       bottom: 80px;
       left: 50%;
       transform: translateX(-50%);
-      width: 300px;
-      height: 300px;
+      width: 600px;
+      height: 360px;
       display: none;
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 15px;
+      padding: 15px;
     }
     
     .dpad-button {
-      position: absolute;
-      width: 100px;
-      height: 100px;
       background: rgba(0, 0, 0, 0.8);
       border: 4px solid rgba(255, 255, 255, 0.8);
       border-radius: 15px;
       color: white;
-      font-size: 36px;
+      font-size: 54px;
       font-weight: bold;
       display: flex;
       align-items: center;
@@ -44,6 +45,7 @@
       touch-action: manipulation;
       box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
       transition: all 0.1s ease;
+      cursor: pointer;
     }
     
     .dpad-button:active {
@@ -52,15 +54,44 @@
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.7);
     }
     
-    .dpad-up { top: 0; left: 100px; }
-    .dpad-down { bottom: 0; left: 100px; }
-    .dpad-left { top: 100px; left: 0; }
-    .dpad-right { top: 100px; right: 0; }
+    /* Grid positioning for each button */
+    .dpad-up { 
+      grid-column: 2; 
+      grid-row: 1; 
+    }
+    .dpad-left { 
+      grid-column: 1; 
+      grid-row: 2; 
+    }
+    .dpad-right { 
+      grid-column: 3; 
+      grid-row: 2; 
+    }
+    .dpad-down { 
+      grid-column: 2; 
+      grid-row: 3; 
+    }
+    
+    /* Attack button integrated into grid */
+    .dpad-attack {
+      grid-column: 5;
+      grid-row: 2;
+      background: rgba(255, 215, 0, 0.95);
+      border: 4px solid rgba(255, 255, 255, 0.8);
+      color: #8B4513;
+      border-radius: 50%;
+    }
+    
+    .dpad-attack:active {
+      background: rgba(255, 215, 0, 1);
+      transform: scale(0.95);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.7);
+    }
     
     /* Show D-pad on mobile devices */
     @media (max-width: 768px), (pointer: coarse) {
       .dpad {
-        display: block;
+        display: grid;
       }
       
       /* Adjust scoreboard for mobile */
@@ -78,26 +109,14 @@
     @media (max-width: 480px) {
       .dpad {
         bottom: 40px;
-        width: 200px;
-        height: 200px;
+        width: 525px;
+        height: 315px;
+        gap: 12px;
+        padding: 12px;
       }
       
       .dpad-button {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
-      }
-      
-      .dpad-up { left: 70px; }
-      .dpad-down { left: 70px; }
-      .dpad-left { top: 70px; }
-      .dpad-right { top: 70px; }
-      
-      .sword-button {
-        width: 80px;
-        height: 80px;
-        font-size: 32px;
-        bottom: 40px;
+        font-size: 42px;
       }
     }
     
@@ -137,41 +156,6 @@
       color: #00FF00;
       font-weight: bold;
     }
-    
-    /* Mobile sword button */
-    .sword-button {
-      position: fixed;
-      bottom: 50px;
-      right: 50px;
-      width: 90px;
-      height: 90px;
-      background: rgba(255, 215, 0, 0.95);
-      border: 4px solid rgba(255, 255, 255, 0.8);
-      border-radius: 50%;
-      color: #8B4513;
-      font-size: 36px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      user-select: none;
-      touch-action: manipulation;
-      cursor: pointer;
-      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
-      transition: all 0.1s ease;
-    }
-    
-    .sword-button:active {
-      background: rgba(255, 215, 0, 1);
-      transform: scale(0.95);
-      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.6);
-    }
-    
-    /* Show sword button on mobile devices */
-    @media (max-width: 768px), (pointer: coarse) {
-      .sword-button {
-        display: flex;
-      }
-    }
   </style>
 </head>
 <body>
@@ -181,10 +165,8 @@
     <div class="dpad-button dpad-down" data-direction="down">↓</div>
     <div class="dpad-button dpad-left" data-direction="left">←</div>
     <div class="dpad-button dpad-right" data-direction="right">→</div>
+    <div class="dpad-button dpad-attack" id="dpad-attack">⚔️</div>
   </div>
-  
-  <!-- Mobile sword button -->
-  <div class="sword-button" id="sword-button">⚔️</div>
   
   <!-- Scoreboard -->
   <div class="scoreboard" id="scoreboard">
@@ -701,13 +683,13 @@
       });
     });
     
-    // Mobile sword button
-    document.getElementById('sword-button').addEventListener('touchstart', (e) => {
+    // Mobile attack button integrated in grid
+    document.getElementById('dpad-attack').addEventListener('touchstart', (e) => {
       e.preventDefault();
       swingSword();
     });
     
-    document.getElementById('sword-button').addEventListener('mousedown', (e) => {
+    document.getElementById('dpad-attack').addEventListener('mousedown', (e) => {
       e.preventDefault();
       swingSword();
     });
