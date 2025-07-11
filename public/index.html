@@ -671,9 +671,14 @@
         
         // Update swing state based on server data for all players
         if (p.isSwinging) {
-          // Only log that we're drawing, don't modify the swing state
-          // Let the server handle clearing the swing state
-          console.log(`Drawing sword for player ${id}, facing: ${p.facing}, isSwinging: ${p.isSwinging}`);
+          // Only log once when we first detect a swing, not every frame
+          if (!p.swingLogged) {
+            console.log(`Player ${id} started sword swing, facing: ${p.facing}`);
+            p.swingLogged = true;
+          }
+        } else {
+          // Clear the log flag when swing stops
+          p.swingLogged = false;
         }
         
         if (assets.loaded) {
@@ -714,7 +719,6 @@
           
           // Draw sword swing effect if player is swinging
           if (p.isSwinging) {
-            console.log(`Drawing sword for player ${id}, facing: ${p.facing}, isSwinging: ${p.isSwinging}`);
             drawSwordSwing(p);
           }
         } else {
@@ -737,8 +741,6 @@
       
       // Draw sword swing effect
       function drawSwordSwing(player) {
-        console.log(`drawSwordSwing called for player facing ${player.facing}, assets loaded: ${assets.loaded}`);
-        
         // Get the appropriate sword sprite based on facing direction
         let swordSprite;
         let swordX = player.x;

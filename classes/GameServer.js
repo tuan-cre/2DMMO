@@ -187,7 +187,7 @@ class GameServer {
     
     // Clear expired sword swings
     for (let [id, player] of this.players) {
-      if (player.isSwinging && player.swingEndTime && now > player.swingEndTime + 500) {
+      if (player.isSwinging && player.swingEndTime && now > player.swingEndTime) {
         player.clearSwing();
         console.log(`Server cleared sword swing for player ${id}`);
       }
