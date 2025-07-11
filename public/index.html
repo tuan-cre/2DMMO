@@ -196,6 +196,15 @@
     let gameState = { map: null };
     let selfId = null;
     
+    // Camera system for following player
+    let camera = {
+      x: 0,
+      y: 0,
+      targetX: 0,
+      targetY: 0,
+      smoothing: 0.1 // Camera smoothing factor (0.1 = smooth, 1 = instant)
+    };
+    
     // Client-side prediction and lag compensation
     let lastMoveTime = 0;
     const MOVE_THROTTLE = 50; // Faster movement response
@@ -209,6 +218,28 @@
     setInterval(() => {
       animationFrame++;
     }, 500); // Change frame every 500ms (slower animation)
+    
+    // Update camera position
+    function updateCamera() {
+      if (selfId && players[selfId]) {
+        const player = players[selfId];
+        
+        // Set target position to center the player on screen
+        camera.targetX = player.x - canvas.width / 2;
+        camera.targetY = player.y - canvas.height / 2;
+        
+        // If map is available, clamp camera to map boundaries
+        if (gameState.map && gameState.map.width && gameState.map.height) {
+          // Prevent camera from showing beyond map edges
+          camera.targetX = Math.max(0, Math.min(gameState.map.width - canvas.width, camera.targetX));
+          camera.targetY = Math.max(0, Math.min(gameState.map.height - canvas.height, camera.targetY));
+        }
+        
+        // Smooth camera movement
+        camera.x += (camera.targetX - camera.x) * camera.smoothing;
+        camera.y += (camera.targetY - camera.y) * camera.smoothing;
+      }
+    }
     
     // Asset management
     const assets = {
@@ -740,15 +771,22 @@
       const tileMap = tileData.tileMap;
       const tileTypes = tileData.tileTypes || {};
       
-      for (let y = 0; y < tileMap.length; y++) {
-        for (let x = 0; x < tileMap[y].length; x++) {
+      // Calculate which tiles are visible on screen
+      const startTileX = Math.max(0, Math.floor(camera.x / tileSize));
+      const endTileX = Math.min(tileMap[0].length - 1, Math.ceil((camera.x + canvas.width) / tileSize));
+      const startTileY = Math.max(0, Math.floor(camera.y / tileSize));
+      const endTileY = Math.min(tileMap.length - 1, Math.ceil((camera.y + canvas.height) / tileSize));
+      
+      // Only draw visible tiles for better performance
+      for (let y = startTileY; y <= endTileY; y++) {
+        for (let x = startTileX; x <= endTileX; x++) {
           const tileType = tileMap[y][x];
           const tileTypeData = tileTypes[tileType];
           
           if (!tileTypeData) continue;
           
-          const drawX = x * tileSize;
-          const drawY = y * tileSize;
+          const drawX = x * tileSize - camera.x;
+          const drawY = y * tileSize - camera.y;
           
           // Try to draw sprite first
           if (assets.loaded && assets.tiles && assets.tiles[tileType]) {
@@ -767,12 +805,20 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
+      // Update camera to follow player
+      updateCamera();
+      
       // Draw background if available
       if (assets.loaded && assets.backgrounds.grass) {
         const bg = assets.backgrounds.grass;
         const pattern = ctx.createPattern(bg, 'repeat');
         ctx.fillStyle = pattern;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Offset background pattern with camera
+        ctx.save();
+        ctx.translate(-camera.x % bg.width, -camera.y % bg.height);
+        ctx.fillRect(camera.x, camera.y, canvas.width + bg.width, canvas.height + bg.height);
+        ctx.restore();
       }
       
       // Draw tiles if map data is available
@@ -784,103 +830,116 @@
       for (let id in players) {
         const p = players[id];
         
-        // Update swing state based on server data for all players
-        if (p.isSwinging) {
-          // Only log once when we first detect a swing, not every frame
-          if (!p.swingLogged) {
-            console.log(`Player ${id} started sword swing, facing: ${p.facing}`);
-            p.swingLogged = true;
-          }
-        } else {
-          // Clear the log flag when swing stops
-          p.swingLogged = false;
-        }
+        // Calculate screen position relative to camera
+        const screenX = p.x - camera.x;
+        const screenY = p.y - camera.y;
         
-        if (assets.loaded) {
-          // Initialize animation state if needed
-          if (!playerAnimations[id]) {
-            playerAnimations[id] = { isMoving: false, lastMoveTime: 0 };
-          }
+        // Only draw if player is visible on screen (with some margin)
+        if (screenX > -50 && screenX < canvas.width + 50 && 
+            screenY > -50 && screenY < canvas.height + 50) {
           
-          // Check if player should stop moving animation
-          const timeSinceMove = Date.now() - playerAnimations[id].lastMoveTime;
-          if (timeSinceMove > 500) { // Stop animation 500ms after last move
-            playerAnimations[id].isMoving = false;
-          }
-          
-          // Choose sprite based on player type and animation state
-          let spriteName;
-          if (id === selfId) {
-            // Self player sprites - use more stable animation logic
-            if (playerAnimations[id].isMoving) {
-              spriteName = (Math.floor(animationFrame / 3) % 2 === 0) ? 'player_self1' : 'player_self2';
-            } else {
-              spriteName = 'player_self1'; // Default to frame 1 when not moving
+          // Update swing state based on server data for all players
+          if (p.isSwinging) {
+            // Only log once when we first detect a swing, not every frame
+            if (!p.swingLogged) {
+              console.log(`Player ${id} started sword swing, facing: ${p.facing}`);
+              p.swingLogged = true;
             }
           } else {
-            // Other player sprites
-            if (playerAnimations[id].isMoving) {
-              spriteName = (Math.floor(animationFrame / 3) % 2 === 0) ? 'player_other1' : 'player_other2';
-            } else {
-              spriteName = 'player_other1'; // Default to frame 1 when not moving
+            // Clear the log flag when swing stops
+            p.swingLogged = false;
+          }
+          
+          if (assets.loaded) {
+            // Initialize animation state if needed
+            if (!playerAnimations[id]) {
+              playerAnimations[id] = { isMoving: false, lastMoveTime: 0 };
             }
+            
+            // Check if player should stop moving animation
+            const timeSinceMove = Date.now() - playerAnimations[id].lastMoveTime;
+            if (timeSinceMove > 500) { // Stop animation 500ms after last move
+              playerAnimations[id].isMoving = false;
+            }
+            
+            // Choose sprite based on player type and animation state
+            let spriteName;
+            if (id === selfId) {
+              // Self player sprites - use more stable animation logic
+              if (playerAnimations[id].isMoving) {
+                spriteName = (Math.floor(animationFrame / 3) % 2 === 0) ? 'player_self1' : 'player_self2';
+              } else {
+                spriteName = 'player_self1'; // Default to frame 1 when not moving
+              }
+            } else {
+              // Other player sprites
+              if (playerAnimations[id].isMoving) {
+                spriteName = (Math.floor(animationFrame / 3) % 2 === 0) ? 'player_other1' : 'player_other2';
+              } else {
+                spriteName = 'player_other1'; // Default to frame 1 when not moving
+              }
+            }
+            
+            const sprite = assets.sprites[spriteName];
+            if (sprite) {
+              // Draw sprite (32x32) centered on player position, adjusted for camera
+              ctx.drawImage(sprite, screenX - 11, screenY - 11, 32, 32);
+            }
+            
+            // Draw sword swing effect if player is swinging
+            if (p.isSwinging) {
+              drawSwordSwing(p, screenX, screenY);
+            }
+          } else {
+            // Fallback to rectangles while assets are loading
+            ctx.fillStyle = id === selfId ? 'lime' : 'cyan';
+            ctx.fillRect(screenX, screenY, 10, 10);
           }
           
-          const sprite = assets.sprites[spriteName];
-          if (sprite) {
-            // Draw sprite (32x32) centered on player position
-            ctx.drawImage(sprite, p.x - 11, p.y - 11, 32, 32);
-          }
+          // Draw player name above the character (adjusted for camera)
+          ctx.fillStyle = 'black';
+          ctx.font = '12px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(p.name || 'Player', screenX + 5, screenY - 25);
           
-          // Draw sword swing effect if player is swinging
-          if (p.isSwinging) {
-            drawSwordSwing(p);
+          // Draw player health bar (adjusted for camera)
+          if (p.health !== undefined) {
+            drawHealthBar(screenX + 5, screenY - 15, p.health, p.maxHealth, 'lime');
           }
-        } else {
-          // Fallback to rectangles while assets are loading
-          ctx.fillStyle = id === selfId ? 'lime' : 'cyan';
-          ctx.fillRect(p.x, p.y, 10, 10);
-        }
-        
-        // Draw player name above the character
-        ctx.fillStyle = 'black';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.name || 'Player', p.x + 5, p.y - 25);
-        
-        // Draw player health bar
-        if (p.health !== undefined) {
-          drawHealthBar(p.x + 5, p.y - 15, p.health, p.maxHealth, 'lime');
         }
       }
       
       // Draw sword swing effect
-      function drawSwordSwing(player) {
+      function drawSwordSwing(player, screenX = null, screenY = null) {
+        // Use provided screen coordinates or calculate from world coordinates
+        const drawX = screenX !== null ? screenX : player.x - camera.x;
+        const drawY = screenY !== null ? screenY : player.y - camera.y;
+        
         // Get the appropriate sword sprite based on facing direction
         let swordSprite;
-        let swordX = player.x;
-        let swordY = player.y;
+        let swordX = drawX;
+        let swordY = drawY;
         
         switch(player.facing) {
           case 'up':
             swordSprite = assets.loaded ? assets.sprites.sword_up : null;
-            swordX = player.x - 11; // Center horizontally
-            swordY = player.y - 32; // Position above player
+            swordX = drawX - 11; // Center horizontally
+            swordY = drawY - 32; // Position above player
             break;
           case 'down':
             swordSprite = assets.loaded ? assets.sprites.sword_down : null;
-            swordX = player.x - 11; // Center horizontally
-            swordY = player.y + 11; // Position below player
+            swordX = drawX - 11; // Center horizontally
+            swordY = drawY + 11; // Position below player
             break;
           case 'left':
             swordSprite = assets.loaded ? assets.sprites.sword_left : null;
-            swordX = player.x - 32; // Position to the left
-            swordY = player.y - 11; // Center vertically
+            swordX = drawX - 32; // Position to the left
+            swordY = drawY - 11; // Center vertically
             break;
           case 'right':
             swordSprite = assets.loaded ? assets.sprites.sword_right : null;
-            swordX = player.x + 11; // Position to the right
-            swordY = player.y - 11; // Center vertically
+            swordX = drawX + 11; // Position to the right
+            swordY = drawY - 11; // Center vertically
             break;
         }
         
@@ -894,30 +953,30 @@
           ctx.lineCap = 'round';
           
           const swordLength = 15;
-          let startX = player.x + 5; // Center of player
-          let startY = player.y + 5;
+          let startX = drawX + 5; // Center of player
+          let startY = drawY + 5;
           let endX = startX;
           let endY = startY;
           
           // Calculate sword position based on facing direction
           switch(player.facing) {
             case 'up':
-              startY = player.y - 5;
+              startY = drawY - 5;
               endX = startX;
               endY = startY - swordLength;
               break;
             case 'down':
-              startY = player.y + 15;
+              startY = drawY + 15;
               endX = startX;
               endY = startY + swordLength;
               break;
             case 'left':
-              startX = player.x - 5;
+              startX = drawX - 5;
               endX = startX - swordLength;
               endY = startY;
               break;
             case 'right':
-              startX = player.x + 15;
+              startX = drawX + 15;
               endX = startX + swordLength;
               endY = startY;
               break;
@@ -941,24 +1000,33 @@
       for (let id in enemies) {
         const enemy = enemies[id];
         
-        if (assets.loaded && assets.sprites.enemy) {
-          // Draw enemy sprite
-          ctx.drawImage(assets.sprites.enemy, enemy.x - 11, enemy.y - 11, 32, 32);
-        } else {
-          // Fallback to red rectangle while assets are loading
+        // Calculate screen position relative to camera
+        const screenX = enemy.x - camera.x;
+        const screenY = enemy.y - camera.y;
+        
+        // Only draw if enemy is visible on screen (with some margin)
+        if (screenX > -50 && screenX < canvas.width + 50 && 
+            screenY > -50 && screenY < canvas.height + 50) {
+          
+          if (assets.loaded && assets.sprites.enemy) {
+            // Draw enemy sprite (adjusted for camera)
+            ctx.drawImage(assets.sprites.enemy, screenX - 11, screenY - 11, 32, 32);
+          } else {
+            // Fallback to red rectangle while assets are loading
+            ctx.fillStyle = 'red';
+            ctx.fillRect(screenX, screenY, 10, 10);
+          }
+          
+          // Draw enemy name above the character (adjusted for camera)
           ctx.fillStyle = 'red';
-          ctx.fillRect(enemy.x, enemy.y, 10, 10);
-        }
-        
-        // Draw enemy name above the character
-        ctx.fillStyle = 'red';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(enemy.name || 'Enemy', enemy.x + 5, enemy.y - 25);
-        
-        // Draw enemy health bar
-        if (enemy.health !== undefined) {
-          drawHealthBar(enemy.x + 5, enemy.y - 15, enemy.health, enemy.maxHealth, 'red');
+          ctx.font = '12px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(enemy.name || 'Enemy', screenX + 5, screenY - 25);
+          
+          // Draw enemy health bar (adjusted for camera)
+          if (enemy.health !== undefined) {
+            drawHealthBar(screenX + 5, screenY - 15, enemy.health, enemy.maxHealth, 'red');
+          }
         }
       }
       
